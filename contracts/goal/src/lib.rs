@@ -321,6 +321,25 @@ mod tests {
         )
     }
 
+    /// Как `new_goal`, но с произвольными строками, долей и окном.
+    fn new_goal_with(
+        goal_title: &str,
+        goal_uri: &str,
+        immediate_bps: u16,
+        challenge_window_ms: u64,
+        milestones: Vec<MilestoneInput>,
+    ) -> Goal {
+        Goal::new(
+            creator(),
+            verifier(),
+            goal_title.to_string(),
+            goal_uri.to_string(),
+            immediate_bps,
+            challenge_window_ms,
+            milestones,
+        )
+    }
+
     // SPEC 10, тест 1
     #[test]
     #[should_panic(expected = "Weights must sum to 10000")]
@@ -352,6 +371,86 @@ mod tests {
     fn new_rejects_verifier_equal_to_creator() {
         set_context(creator());
         new_goal(creator(), milestones(&[4000, 3000, 3000]));
+    }
+
+    #[test]
+    #[should_panic(expected = "Deadline must be in future")]
+    fn new_rejects_deadline_in_past() {
+        set_context(creator());
+        let mut ms = milestones(&[5000, 5000]);
+        ms[1].deadline_ms = NOW_MS - 1;
+        new_goal(verifier(), ms);
+    }
+
+    #[test]
+    #[should_panic(expected = "Deadline must be in future")]
+    fn new_rejects_deadline_equal_to_now() {
+        set_context(creator());
+        let mut ms = milestones(&[10_000]);
+        ms[0].deadline_ms = NOW_MS;
+        new_goal(verifier(), ms);
+    }
+
+    #[test]
+    #[should_panic(expected = "Weight must be > 0")]
+    fn new_rejects_zero_weight() {
+        set_context(creator());
+        new_goal(verifier(), milestones(&[10_000, 0]));
+    }
+
+    #[test]
+    #[should_panic(expected = "Goal title must be 1-100 chars")]
+    fn new_rejects_empty_goal_title() {
+        set_context(creator());
+        new_goal_with("", "", 5000, 120_000, milestones(&[10_000]));
+    }
+
+    #[test]
+    #[should_panic(expected = "Goal title must be 1-100 chars")]
+    fn new_rejects_long_goal_title() {
+        set_context(creator());
+        new_goal_with(&"a".repeat(101), "", 5000, 120_000, milestones(&[10_000]));
+    }
+
+    #[test]
+    #[should_panic(expected = "URI too long")]
+    fn new_rejects_long_goal_uri() {
+        set_context(creator());
+        new_goal_with("Goal", &"a".repeat(257), 5000, 120_000, milestones(&[10_000]));
+    }
+
+    #[test]
+    #[should_panic(expected = "Milestone title must be 1-100 chars")]
+    fn new_rejects_long_milestone_title() {
+        set_context(creator());
+        let mut ms = milestones(&[10_000]);
+        ms[0].title = "a".repeat(101);
+        new_goal(verifier(), ms);
+    }
+
+    #[test]
+    #[should_panic(expected = "immediate_bps must be <= 10000")]
+    fn new_rejects_immediate_bps_above_10000() {
+        set_context(creator());
+        new_goal_with("Goal", "", 10_001, 120_000, milestones(&[10_000]));
+    }
+
+    #[test]
+    #[should_panic(expected = "Window must be > 0")]
+    fn new_rejects_zero_window() {
+        set_context(creator());
+        new_goal_with("Goal", "", 5000, 0, milestones(&[10_000]));
+    }
+
+    #[test]
+    fn new_accepts_limits() {
+        set_context(creator());
+        // Длина считается в символах, не в байтах: «я» — 2 байта, но 1 символ.
+        let mut ms = milestones(&[10_000]);
+        ms[0].title = "я".repeat(100);
+        ms[0].deadline_ms = NOW_MS + 1;
+        let goal = new_goal_with(&"я".repeat(100), &"a".repeat(256), 10_000, 1, ms);
+        assert_eq!(goal.get_goal().immediate_bps, 10_000);
     }
 
     #[test]
