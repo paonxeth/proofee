@@ -1,6 +1,6 @@
 // Контракт цели ProoFee. Спецификация — docs/SPEC.md.
 use near_sdk::serde_json::json;
-use near_sdk::{AccountId, NearToken, PanicOnDefault, env, near, require};
+use near_sdk::{AccountId, Gas, NearToken, PanicOnDefault, Promise, env, near, require};
 
 mod events;
 mod math;
@@ -12,6 +12,7 @@ const MAX_TITLE_LEN: usize = 100;
 const MAX_URI_LEN: usize = 256;
 const MAX_REASON_LEN: usize = 280;
 const PROOF_HASH_LEN: usize = 64;
+const CALLBACK_GAS: Gas = Gas::from_tgas(5);
 
 /// Этап, как его передают в `new`.
 #[near(serializers = [json])]
@@ -304,15 +305,68 @@ impl Goal {
         emit_resolved(index, &m.status);
     }
 
-    pub fn get_balances(&self) -> BalancesView {
-        let (w_acc, w_lost) = self.weights();
-        let b = math::compute(
-            self.total_received.as_yoctonear(),
-            self.immediate_bps,
-            w_acc,
-            w_lost,
-            self.claimed.as_yoctonear(),
+    /// Выплата креатору всего доступного (SPEC 5.3).
+    pub fn claim(&mut self) -> Promise {
+        require!(
+            env::predecessor_account_id() == self.creator,
+            "Only creator"
         );
+        self.sync();
+
+        let claimable = self.breakdown().claimable;
+        // Деньги, которые держат хранение, не выплачиваем.
+        let storage_cost = u128::from(env::storage_usage())
+            .checked_mul(env::storage_byte_cost().as_yoctonear())
+            .unwrap_or_else(|| math::overflow());
+        // Хранение дороже баланса → свободно 0 (вычитание с упором в ноль).
+        let free = env::account_balance()
+            .as_yoctonear()
+            .saturating_sub(storage_cost);
+        let amount = NearToken::from_yoctonear(claimable.min(free));
+        require!(!amount.is_zero(), "Nothing to claim");
+
+        // Сначала состояние, потом перевод.
+        self.claimed = self
+            .claimed
+            .checked_add(amount)
+            .unwrap_or_else(|| math::overflow());
+        self.last_balance = self
+            .last_balance
+            .checked_sub(amount)
+            .unwrap_or_else(|| math::overflow());
+
+        Promise::new(self.creator.clone()).transfer(amount).then(
+            Self::ext(env::current_account_id())
+                .with_static_gas(CALLBACK_GAS)
+                .on_claim_transfer(amount),
+        )
+    }
+
+    /// Итог перевода из `claim`. При неудаче откатывает счётчики.
+    #[private]
+    pub fn on_claim_transfer(&mut self, amount: NearToken) {
+        // У перевода пустой результат, поэтому max_len = 0.
+        let transferred = env::promise_result_checked(0, 0).is_ok();
+        if transferred {
+            events::emit(
+                "claimed",
+                json!({ "amount": amount, "total_claimed": self.claimed }),
+            );
+        } else {
+            self.claimed = self
+                .claimed
+                .checked_sub(amount)
+                .unwrap_or_else(|| math::overflow());
+            self.last_balance = self
+                .last_balance
+                .checked_add(amount)
+                .unwrap_or_else(|| math::overflow());
+            events::emit("claim_failed", json!({ "amount": amount }));
+        }
+    }
+
+    pub fn get_balances(&self) -> BalancesView {
+        let b = self.breakdown();
         let unsynced = env::account_balance()
             .checked_sub(self.last_balance)
             .unwrap_or(NearToken::from_yoctonear(0));
@@ -359,6 +413,18 @@ impl Goal {
         );
     }
 
+    /// Раскладка учтённого дохода по формулам SPEC 5.2.
+    fn breakdown(&self) -> math::Breakdown {
+        let (w_acc, w_lost) = self.weights();
+        math::compute(
+            self.total_received.as_yoctonear(),
+            self.immediate_bps,
+            w_acc,
+            w_lost,
+            self.claimed.as_yoctonear(),
+        )
+    }
+
     /// (W_acc, W_lost): сумма весов принятых и отклонённых/проваленных этапов.
     fn weights(&self) -> (u32, u32) {
         let mut w_acc: u32 = 0;
@@ -383,7 +449,7 @@ impl Goal {
 mod tests {
     use super::*;
     use near_sdk::test_utils::{VMContextBuilder, get_logs};
-    use near_sdk::testing_env;
+    use near_sdk::{PromiseResult, testing_env};
 
     const NOW_MS: u64 = 1_000_000;
     const DAY_MS: u64 = 86_400_000;
@@ -1000,5 +1066,162 @@ mod tests {
         submit_at(&mut goal, 2, DEADLINE_MS - 1);
         set_time(stranger(), DEADLINE_MS);
         goal.expire(2);
+    }
+
+    // ---- Выплата (SPEC 5.3) ----
+
+    /// Вызов `claim`: баланс и занятое хранилище в байтах задаются явно.
+    fn set_claim_env(predecessor: AccountId, balance: NearToken, storage_usage: u64) {
+        let mut builder = VMContextBuilder::new();
+        builder
+            .current_account_id("goal.testnet".parse().unwrap())
+            .predecessor_account_id(predecessor)
+            .block_timestamp(NOW_MS * 1_000_000)
+            .account_balance(balance)
+            .storage_usage(storage_usage);
+        testing_env!(builder.build());
+    }
+
+    /// Вызов колбэка: его вызывает сам контракт, результат перевода — `result`.
+    fn set_callback_env(balance: NearToken, result: PromiseResult) {
+        let mut builder = VMContextBuilder::new();
+        builder
+            .current_account_id("goal.testnet".parse().unwrap())
+            .predecessor_account_id("goal.testnet".parse().unwrap())
+            .block_timestamp(NOW_MS * 1_000_000)
+            .account_balance(balance);
+        testing_env!(
+            builder.build(),
+            near_sdk::test_vm_config(),
+            near_sdk::RuntimeFeesConfig::test(),
+            Default::default(),
+            vec![result],
+        );
+    }
+
+    /// Цель 40/30/30, пришло 10 NEAR (баланс 15), creator уже вызвал `claim` на 5 NEAR.
+    fn claimed_goal() -> Goal {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        set_context_with(creator(), NearToken::from_near(15), NearToken::from_near(0));
+        let _ = goal.claim();
+        goal
+    }
+
+    // SPEC 10, тест 10
+    #[test]
+    fn claim_pays_exactly_claimable() {
+        let mut goal = claimed_goal();
+        assert_eq!(goal.claimed, NearToken::from_near(5));
+        // Мок, как и сеть, списал перевод с баланса сразу.
+        assert_eq!(env::account_balance(), NearToken::from_near(10));
+        assert_eq!(goal.last_balance, NearToken::from_near(10));
+        assert_eq!(goal.get_balances().claimable, NearToken::from_near(0));
+
+        // Выплата — не «минус доход»: sync после неё ничего нового не видит.
+        goal.sync();
+        assert_eq!(goal.total_received, NearToken::from_near(10));
+    }
+
+    #[test]
+    #[should_panic(expected = "Nothing to claim")]
+    fn claim_twice_fails() {
+        let mut goal = claimed_goal();
+        let _ = goal.claim();
+    }
+
+    #[test]
+    #[should_panic(expected = "Nothing to claim")]
+    fn claim_without_income_fails() {
+        let mut goal = goal3();
+        let _ = goal.claim();
+    }
+
+    #[test]
+    #[should_panic(expected = "Only creator")]
+    fn claim_rejects_stranger() {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        let _ = goal.claim(); // receive_and_sync оставил вызывающим stranger
+    }
+
+    #[test]
+    #[should_panic(expected = "Only creator")]
+    fn claim_rejects_verifier() {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        set_context_with(verifier(), NearToken::from_near(15), NearToken::from_near(0));
+        let _ = goal.claim();
+    }
+
+    #[test]
+    fn claim_callback_rolls_back_on_failure() {
+        let mut goal = claimed_goal();
+        set_callback_env(NearToken::from_near(10), PromiseResult::Failed);
+        goal.on_claim_transfer(NearToken::from_near(5));
+
+        assert_eq!(goal.claimed, NearToken::from_near(0));
+        assert_eq!(goal.last_balance, NearToken::from_near(15));
+        assert_eq!(goal.get_balances().claimable, NearToken::from_near(5));
+        let logs = get_logs();
+        assert_eq!(logs.len(), 1);
+        assert!(logs[0].contains(r#""event":"claim_failed""#));
+    }
+
+    #[test]
+    fn claim_callback_keeps_counters_on_success() {
+        let mut goal = claimed_goal();
+        set_callback_env(NearToken::from_near(10), PromiseResult::Successful(vec![]));
+        goal.on_claim_transfer(NearToken::from_near(5));
+
+        assert_eq!(goal.claimed, NearToken::from_near(5));
+        assert_eq!(goal.last_balance, NearToken::from_near(10));
+        let logs = get_logs();
+        assert_eq!(logs.len(), 1);
+        assert!(logs[0].contains(r#""event":"claimed""#));
+        assert!(logs[0].contains(r#""total_claimed":"5000000000000000000000000""#));
+    }
+
+    #[test]
+    #[should_panic(expected = "Nothing to claim")]
+    fn claim_spec_example_through_contract() {
+        // 100 NEAR, этап 0 принят, этап 1 отклонён: доступно 50 + 20.
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 100);
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + WINDOW_MS);
+        goal.finalize(0);
+        submit_at(&mut goal, 1, NOW_MS + WINDOW_MS);
+        set_time(stranger(), NOW_MS + WINDOW_MS + 1);
+        goal.challenge(1, "doubt".to_string());
+        set_time(verifier(), NOW_MS + WINDOW_MS + 2);
+        goal.resolve(1, false);
+
+        set_context_with(creator(), NearToken::from_near(105), NearToken::from_near(0));
+        let _ = goal.claim();
+        assert_eq!(goal.claimed, NearToken::from_near(70));
+        assert_eq!(goal.get_balances().forfeited, NearToken::from_near(15));
+        let _ = goal.claim();
+    }
+
+    #[test]
+    fn claim_keeps_storage_reserve() {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        // Хранение 1 100 000 байт = 11 NEAR. Свободно 15 − 11 = 4 < доступных 5.
+        set_claim_env(creator(), NearToken::from_near(15), 1_100_000);
+        let _ = goal.claim();
+        assert_eq!(goal.claimed, NearToken::from_near(4));
+        assert_eq!(goal.get_balances().claimable, NearToken::from_near(1));
+    }
+
+    #[test]
+    #[should_panic(expected = "Nothing to claim")]
+    fn claim_nothing_when_storage_takes_all() {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        // Хранение 1 600 000 байт = 16 NEAR, больше баланса.
+        set_claim_env(creator(), NearToken::from_near(15), 1_600_000);
+        let _ = goal.claim();
     }
 }
