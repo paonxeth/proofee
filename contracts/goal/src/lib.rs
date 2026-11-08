@@ -166,7 +166,12 @@ impl Goal {
                 challenger: None,
                 challenge_reason: None,
             })
-            .collect();
+            .collect::<Vec<_>>();
+
+        events::emit(
+            "goal_created",
+            json!({ "creator": creator, "verifier": verifier, "milestones": milestones.len() }),
+        );
 
         Self {
             creator,
@@ -664,6 +669,19 @@ mod tests {
     }
 
     #[test]
+    fn new_emits_goal_created() {
+        set_context(creator());
+        new_goal(verifier(), milestones(&[4000, 3000, 3000]));
+
+        let logs = get_logs();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(
+            logs[0],
+            r#"EVENT_JSON:{"standard":"proofee","version":"1.0.0","event":"goal_created","data":[{"creator":"creator.testnet","verifier":"verifier.testnet","milestones":3}]}"#
+        );
+    }
+
+    #[test]
     fn new_sets_initial_state() {
         set_context(creator());
         let goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
@@ -721,7 +739,7 @@ mod tests {
         goal.sync();
         assert_eq!(goal.total_received, NearToken::from_near(0));
         assert_eq!(goal.last_balance, NearToken::from_near(5));
-        assert!(get_logs().is_empty());
+        assert!(!get_logs().iter().any(|l| l.contains("fees_synced")));
     }
 
     #[test]
