@@ -172,7 +172,9 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 
 Сообщения об ошибках — короткие и понятные: `"Only creator"`, `"Only verifier"`,
 `"Wrong status"`, `"Deadline passed"`, `"Window closed"`, `"Window still open"`,
-`"Nothing to claim"`, `"Weights must sum to 10000"`.
+`"Nothing to claim"`, `"Weights must sum to 10000"`, `"No such milestone"`,
+`"Invalid proof hash"`, `"Creator cannot challenge"`, `"Reason too long"`,
+`"Deadline not passed"`.
 
 ## 8. События (NEP-297)
 

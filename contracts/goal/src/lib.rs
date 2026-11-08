@@ -10,6 +10,8 @@ use math::BPS_DENOMINATOR;
 const MAX_MILESTONES: usize = 5;
 const MAX_TITLE_LEN: usize = 100;
 const MAX_URI_LEN: usize = 256;
+const MAX_REASON_LEN: usize = 280;
+const PROOF_HASH_LEN: usize = 64;
 
 /// Этап, как его передают в `new`.
 #[near(serializers = [json])]
@@ -90,6 +92,22 @@ pub struct Goal {
 
 fn title_ok(title: &str) -> bool {
     (1..=MAX_TITLE_LEN).contains(&title.chars().count())
+}
+
+/// sha256 в hex: ровно 64 символа `0-9a-f`.
+fn is_valid_proof_hash(hash: &str) -> bool {
+    hash.len() == PROOF_HASH_LEN
+        && hash
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// Момент, когда закрывается окно спора по поданному пруфу.
+fn window_end(m: &Milestone, challenge_window_ms: u64) -> u64 {
+    m.submitted_at_ms
+        .unwrap_or_else(|| env::panic_str("No submission time"))
+        .checked_add(challenge_window_ms)
+        .unwrap_or_else(|| math::overflow())
 }
 
 #[near]
@@ -198,6 +216,94 @@ impl Goal {
         self.last_balance = balance;
     }
 
+    /// Pending → Submitted. Только creator, до дедлайна этапа.
+    pub fn submit_proof(&mut self, index: u8, proof_uri: String, proof_hash: String) {
+        self.check_index(index);
+        require!(
+            env::predecessor_account_id() == self.creator,
+            "Only creator"
+        );
+        let now_ms = env::block_timestamp_ms();
+        let m = &mut self.milestones[usize::from(index)];
+        require!(m.status == MilestoneStatus::Pending, "Wrong status");
+        require!(now_ms < m.deadline_ms, "Deadline passed");
+        require!(proof_uri.chars().count() <= MAX_URI_LEN, "URI too long");
+        require!(is_valid_proof_hash(&proof_hash), "Invalid proof hash");
+
+        m.status = MilestoneStatus::Submitted;
+        m.proof_uri = Some(proof_uri.clone());
+        m.proof_hash = Some(proof_hash.clone());
+        m.submitted_at_ms = Some(now_ms);
+        events::emit(
+            "proof_submitted",
+            json!({ "index": index, "proof_uri": proof_uri, "proof_hash": proof_hash }),
+        );
+    }
+
+    /// Submitted → Challenged. Любой, кроме creator, пока окно спора открыто.
+    pub fn challenge(&mut self, index: u8, reason: String) {
+        self.check_index(index);
+        let challenger = env::predecessor_account_id();
+        require!(challenger != self.creator, "Creator cannot challenge");
+        let now_ms = env::block_timestamp_ms();
+        let window_ms = self.challenge_window_ms;
+        let m = &mut self.milestones[usize::from(index)];
+        require!(m.status == MilestoneStatus::Submitted, "Wrong status");
+        require!(now_ms < window_end(m, window_ms), "Window closed");
+        require!(reason.chars().count() <= MAX_REASON_LEN, "Reason too long");
+
+        m.status = MilestoneStatus::Challenged;
+        m.challenger = Some(challenger.clone());
+        m.challenge_reason = Some(reason.clone());
+        events::emit(
+            "proof_challenged",
+            json!({ "index": index, "challenger": challenger, "reason": reason }),
+        );
+    }
+
+    /// Submitted → Accepted. Любой, после окна спора. Дедлайн не важен: пруф подан вовремя.
+    pub fn finalize(&mut self, index: u8) {
+        self.check_index(index);
+        let now_ms = env::block_timestamp_ms();
+        let window_ms = self.challenge_window_ms;
+        let m = &mut self.milestones[usize::from(index)];
+        require!(m.status == MilestoneStatus::Submitted, "Wrong status");
+        require!(now_ms >= window_end(m, window_ms), "Window still open");
+
+        m.status = MilestoneStatus::Accepted;
+        emit_resolved(index, &m.status);
+    }
+
+    /// Challenged → Accepted / Rejected. Только verifier.
+    pub fn resolve(&mut self, index: u8, accept: bool) {
+        self.check_index(index);
+        require!(
+            env::predecessor_account_id() == self.verifier,
+            "Only verifier"
+        );
+        let m = &mut self.milestones[usize::from(index)];
+        require!(m.status == MilestoneStatus::Challenged, "Wrong status");
+
+        m.status = if accept {
+            MilestoneStatus::Accepted
+        } else {
+            MilestoneStatus::Rejected
+        };
+        emit_resolved(index, &m.status);
+    }
+
+    /// Pending → Failed. Любой, после дедлайна.
+    pub fn expire(&mut self, index: u8) {
+        self.check_index(index);
+        let now_ms = env::block_timestamp_ms();
+        let m = &mut self.milestones[usize::from(index)];
+        require!(m.status == MilestoneStatus::Pending, "Wrong status");
+        require!(now_ms >= m.deadline_ms, "Deadline not passed");
+
+        m.status = MilestoneStatus::Failed;
+        emit_resolved(index, &m.status);
+    }
+
     pub fn get_balances(&self) -> BalancesView {
         let (w_acc, w_lost) = self.weights();
         let b = math::compute(
@@ -237,7 +343,22 @@ impl Goal {
     }
 }
 
+/// Событие `milestone_resolved`: `by` — тот, кто вызвал метод.
+fn emit_resolved(index: u8, status: &MilestoneStatus) {
+    events::emit(
+        "milestone_resolved",
+        json!({ "index": index, "status": status, "by": env::predecessor_account_id() }),
+    );
+}
+
 impl Goal {
+    fn check_index(&self, index: u8) {
+        require!(
+            usize::from(index) < self.milestones.len(),
+            "No such milestone"
+        );
+    }
+
     /// (W_acc, W_lost): сумма весов принятых и отклонённых/проваленных этапов.
     fn weights(&self) -> (u32, u32) {
         let mut w_acc: u32 = 0;
@@ -287,14 +408,24 @@ mod tests {
     /// `balance` — баланс до зачисления депозита. Рантайм (и мок near-sdk) сам прибавляет
     /// `deposit`, поэтому `env::account_balance()` внутри вызова = `balance + deposit`.
     fn set_context_with(predecessor: AccountId, balance: NearToken, deposit: NearToken) {
+        set_env(predecessor, NOW_MS, balance, deposit);
+    }
+
+    /// Окружение целиком: кто вызывает, время в мс, баланс до депозита, депозит.
+    fn set_env(predecessor: AccountId, now_ms: u64, balance: NearToken, deposit: NearToken) {
         let mut builder = VMContextBuilder::new();
         builder
             .current_account_id("goal.testnet".parse().unwrap())
             .predecessor_account_id(predecessor)
-            .block_timestamp(NOW_MS * 1_000_000)
+            .block_timestamp(now_ms * 1_000_000)
             .account_balance(balance)
             .attached_deposit(deposit);
         testing_env!(builder.build());
+    }
+
+    /// Вызов от `predecessor` в момент `now_ms`, баланс 5 NEAR.
+    fn set_time(predecessor: AccountId, now_ms: u64) {
+        set_env(predecessor, now_ms, NearToken::from_near(5), NearToken::from_near(0));
     }
 
     fn milestones(weights: &[u16]) -> Vec<MilestoneInput> {
@@ -552,5 +683,322 @@ mod tests {
         goal.deposit();
         assert_eq!(goal.total_received, NearToken::from_near(2));
         assert_eq!(goal.last_balance, NearToken::from_near(7));
+    }
+
+    // ---- Этапы (SPEC 6) ----
+
+    const WINDOW_MS: u64 = 120_000;
+    const DEADLINE_MS: u64 = NOW_MS + DAY_MS;
+    // sha256 пустой строки.
+    const HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    const URI: &str = "https://proofee.example/proof/1";
+
+    /// Цель с этапами 40/30/30 и окном 2 минуты.
+    fn goal3() -> Goal {
+        set_context(creator());
+        new_goal(verifier(), milestones(&[4000, 3000, 3000]))
+    }
+
+    fn submit_at(goal: &mut Goal, index: u8, now_ms: u64) {
+        set_time(creator(), now_ms);
+        goal.submit_proof(index, URI.to_string(), HASH.to_string());
+    }
+
+    /// Баланс стал 5 + `total_near` NEAR (всего пришло `total_near`) — и sync.
+    fn receive_and_sync(goal: &mut Goal, total_near: u128) {
+        set_context_with(
+            stranger(),
+            NearToken::from_near(5 + total_near),
+            NearToken::from_near(0),
+        );
+        goal.sync();
+    }
+
+    fn status(goal: &Goal, index: usize) -> MilestoneStatus {
+        goal.get_goal().milestones[index].status.clone()
+    }
+
+    #[test]
+    #[should_panic(expected = "No such milestone")]
+    fn rejects_unknown_index() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 3, NOW_MS);
+    }
+
+    // SPEC 10, тест 5
+    #[test]
+    fn submit_proof_by_creator() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 1, NOW_MS + 10);
+
+        let m = &goal.get_goal().milestones[1];
+        assert_eq!(m.status, MilestoneStatus::Submitted);
+        assert_eq!(m.proof_uri.as_deref(), Some(URI));
+        assert_eq!(m.proof_hash.as_deref(), Some(HASH));
+        assert_eq!(m.submitted_at_ms, Some(NOW_MS + 10));
+        assert_eq!(status(&goal, 0), MilestoneStatus::Pending);
+
+        let logs = get_logs();
+        assert_eq!(logs.len(), 1);
+        assert!(logs[0].contains(r#""event":"proof_submitted""#));
+        assert!(logs[0].contains(r#""index":1"#));
+    }
+
+    #[test]
+    #[should_panic(expected = "Only creator")]
+    fn submit_proof_rejects_stranger() {
+        let mut goal = goal3();
+        set_time(stranger(), NOW_MS);
+        goal.submit_proof(0, URI.to_string(), HASH.to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Wrong status")]
+    fn submit_proof_only_from_pending() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        submit_at(&mut goal, 0, NOW_MS + 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Deadline passed")]
+    fn submit_proof_rejects_at_deadline() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, DEADLINE_MS);
+    }
+
+    #[test]
+    fn submit_proof_checks_hash() {
+        let bad = [
+            HASH.to_uppercase(),           // верхний регистр
+            HASH[..63].to_string(),        // 63 символа
+            format!("{}g", &HASH[..63]),   // не hex
+            format!("{HASH}0"),            // 65 символов
+        ];
+        for hash in bad {
+            let mut goal = goal3();
+            set_time(creator(), NOW_MS);
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                goal.submit_proof(0, URI.to_string(), hash.clone())
+            }));
+            let err = result.expect_err(&format!("hash {hash} must be rejected"));
+            let msg = err.downcast_ref::<String>().map(String::as_str).unwrap_or("");
+            assert!(msg.contains("Invalid proof hash"), "{hash}: {msg}");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "URI too long")]
+    fn submit_proof_rejects_long_uri() {
+        let mut goal = goal3();
+        set_time(creator(), NOW_MS);
+        goal.submit_proof(0, "a".repeat(257), HASH.to_string());
+    }
+
+    // SPEC 10, тест 6
+    #[test]
+    fn challenge_within_window() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + WINDOW_MS - 1);
+        goal.challenge(0, "Fake screenshot".to_string());
+
+        let m = &goal.get_goal().milestones[0];
+        assert_eq!(m.status, MilestoneStatus::Challenged);
+        assert_eq!(m.challenger, Some(stranger()));
+        assert_eq!(m.challenge_reason.as_deref(), Some("Fake screenshot"));
+        assert!(get_logs()[0].contains(r#""event":"proof_challenged""#));
+    }
+
+    #[test]
+    #[should_panic(expected = "Creator cannot challenge")]
+    fn challenge_rejects_creator() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        goal.challenge(0, "self".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Window closed")]
+    fn challenge_rejects_after_window() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + WINDOW_MS);
+        goal.challenge(0, "late".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Wrong status")]
+    fn challenge_rejects_pending() {
+        let mut goal = goal3();
+        set_time(stranger(), NOW_MS);
+        goal.challenge(0, "nothing to challenge".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Wrong status")]
+    fn challenge_only_once() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + 1);
+        goal.challenge(0, "first".to_string());
+        set_time(verifier(), NOW_MS + 2);
+        goal.challenge(0, "second".to_string());
+    }
+
+    #[test]
+    #[should_panic(expected = "Reason too long")]
+    fn challenge_rejects_long_reason() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + 1);
+        goal.challenge(0, "a".repeat(281));
+    }
+
+    // SPEC 10, тест 7
+    #[test]
+    #[should_panic(expected = "Window still open")]
+    fn finalize_rejects_open_window() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + WINDOW_MS - 1);
+        goal.finalize(0);
+    }
+
+    #[test]
+    fn finalize_after_window_unlocks_share() {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + WINDOW_MS);
+        goal.finalize(0);
+
+        assert_eq!(status(&goal, 0), MilestoneStatus::Accepted);
+        let log = &get_logs()[0];
+        assert!(log.contains(r#""event":"milestone_resolved""#));
+        assert!(log.contains(r#""status":"Accepted""#));
+        assert!(log.contains(r#""by":"stranger.testnet""#));
+
+        // Заложено 5 NEAR, этап 40% → разлочено 2, доступно 5 + 2.
+        let b = goal.get_balances();
+        assert_eq!(b.unlocked, NearToken::from_near(2));
+        assert_eq!(b.forfeited, NearToken::from_near(0));
+        assert_eq!(b.pending, NearToken::from_near(3));
+        assert_eq!(b.claimable, NearToken::from_near(7));
+    }
+
+    #[test]
+    fn finalize_after_deadline_if_submitted_in_time() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, DEADLINE_MS - 1);
+        set_time(stranger(), DEADLINE_MS - 1 + WINDOW_MS);
+        goal.finalize(0);
+        assert_eq!(status(&goal, 0), MilestoneStatus::Accepted);
+    }
+
+    // SPEC 10, тест 8
+    fn challenged(index: u8) -> Goal {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        submit_at(&mut goal, index, NOW_MS);
+        set_time(stranger(), NOW_MS + 1);
+        goal.challenge(index, "doubt".to_string());
+        goal
+    }
+
+    #[test]
+    #[should_panic(expected = "Only verifier")]
+    fn resolve_rejects_non_verifier() {
+        let mut goal = challenged(1);
+        set_time(creator(), NOW_MS + 2);
+        goal.resolve(1, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "Wrong status")]
+    fn resolve_requires_challenge() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 1, NOW_MS);
+        set_time(verifier(), NOW_MS + 1);
+        goal.resolve(1, true);
+    }
+
+    #[test]
+    fn resolve_accept() {
+        let mut goal = challenged(1);
+        set_time(verifier(), NOW_MS + 2);
+        goal.resolve(1, true);
+        assert_eq!(status(&goal, 1), MilestoneStatus::Accepted);
+        assert_eq!(goal.get_balances().unlocked, NearToken::from_millinear(1500));
+    }
+
+    #[test]
+    fn resolve_reject_forfeits_share() {
+        let mut goal = challenged(1);
+        set_time(verifier(), NOW_MS + 2);
+        goal.resolve(1, false);
+        assert_eq!(status(&goal, 1), MilestoneStatus::Rejected);
+        assert!(get_logs()[0].contains(r#""by":"verifier.testnet""#));
+
+        // Заложено 5 NEAR, этап 30% → сгорело 1,5.
+        let b = goal.get_balances();
+        assert_eq!(b.forfeited, NearToken::from_millinear(1500));
+        assert_eq!(b.unlocked, NearToken::from_near(0));
+        assert_eq!(b.claimable, NearToken::from_near(5));
+    }
+
+    #[test]
+    #[should_panic(expected = "Wrong status")]
+    fn resolve_is_final() {
+        let mut goal = challenged(1);
+        set_time(verifier(), NOW_MS + 2);
+        goal.resolve(1, false);
+        goal.resolve(1, true);
+    }
+
+    #[test]
+    fn rejected_share_burns_from_future_fees() {
+        let mut goal = challenged(1);
+        set_time(verifier(), NOW_MS + 2);
+        goal.resolve(1, false);
+        assert_eq!(goal.get_balances().forfeited, NearToken::from_millinear(1500));
+
+        // После отказа пришло ещё 10 NEAR: всего 20, заложено 10.
+        receive_and_sync(&mut goal, 20);
+        let b = goal.get_balances();
+        assert_eq!(b.total_received, NearToken::from_near(20));
+        assert_eq!(b.locked, NearToken::from_near(10));
+        assert_eq!(b.forfeited, NearToken::from_near(3));
+        assert_eq!(b.pending, NearToken::from_near(7));
+        assert_eq!(b.claimable, NearToken::from_near(10));
+    }
+
+    // SPEC 10, тест 9
+    #[test]
+    #[should_panic(expected = "Deadline not passed")]
+    fn expire_rejects_before_deadline() {
+        let mut goal = goal3();
+        set_time(stranger(), DEADLINE_MS - 1);
+        goal.expire(2);
+    }
+
+    #[test]
+    fn expire_after_deadline_fails_milestone() {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        set_time(stranger(), DEADLINE_MS);
+        goal.expire(2);
+        assert_eq!(status(&goal, 2), MilestoneStatus::Failed);
+        assert!(get_logs()[0].contains(r#""status":"Failed""#));
+        assert_eq!(goal.get_balances().forfeited, NearToken::from_millinear(1500));
+    }
+
+    #[test]
+    #[should_panic(expected = "Wrong status")]
+    fn expire_rejects_submitted() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 2, DEADLINE_MS - 1);
+        set_time(stranger(), DEADLINE_MS);
+        goal.expire(2);
     }
 }
