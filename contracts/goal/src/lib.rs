@@ -12,7 +12,7 @@ const MAX_TITLE_LEN: usize = 100;
 const MAX_URI_LEN: usize = 256;
 const MAX_REASON_LEN: usize = 280;
 const PROOF_HASH_LEN: usize = 64;
-const CALLBACK_GAS: Gas = Gas::from_tgas(5);
+const CALLBACK_GAS: Gas = Gas::from_tgas(10);
 
 /// Этап, как его передают в `new`.
 #[near(serializers = [json])]
@@ -89,6 +89,8 @@ pub struct Goal {
     total_received: NearToken,
     claimed: NearToken,
     last_balance: NearToken,
+    /// Выплата, по которой ещё не пришёл колбэк. Пока стоит, `sync` и `claim` заблокированы.
+    payout_in_flight: Option<NearToken>,
 }
 
 fn title_ok(title: &str) -> bool {
@@ -179,6 +181,7 @@ impl Goal {
             claimed: NearToken::from_yoctonear(0),
             // Стартовый депозит — не доход (SPEC 5.1).
             last_balance: env::account_balance(),
+            payout_in_flight: None,
         }
     }
 
@@ -199,7 +202,12 @@ impl Goal {
     }
 
     /// Всё, что выросло сверх `last_balance`, — новый доход (SPEC 5.1).
+    /// `last_balance` никогда не уменьшается, а пока выплата в пути, sync пропускается:
+    /// так возврат неудачной выплаты не посчитается доходом.
     pub fn sync(&mut self) {
+        if self.payout_in_flight.is_some() {
+            return;
+        }
         let balance = env::account_balance();
         if balance > self.last_balance {
             let income = balance
@@ -213,8 +221,8 @@ impl Goal {
                 "fees_synced",
                 json!({ "income": income, "total_received": self.total_received }),
             );
+            self.last_balance = balance;
         }
-        self.last_balance = balance;
     }
 
     /// Pending → Submitted. Только creator, до дедлайна этапа.
@@ -311,6 +319,7 @@ impl Goal {
             env::predecessor_account_id() == self.creator,
             "Only creator"
         );
+        require!(self.payout_in_flight.is_none(), "Payout in progress");
         self.sync();
 
         let claimable = self.breakdown().claimable;
@@ -334,6 +343,7 @@ impl Goal {
             .last_balance
             .checked_sub(amount)
             .unwrap_or_else(|| math::overflow());
+        self.payout_in_flight = Some(amount);
 
         Promise::new(self.creator.clone()).transfer(amount).then(
             Self::ext(env::current_account_id())
@@ -343,8 +353,11 @@ impl Goal {
     }
 
     /// Итог перевода из `claim`. При неудаче откатывает счётчики.
+    /// Здесь нет проверок, которые могут упасть: невыполненный колбэк оставит флаг
+    /// выплаты навсегда.
     #[private]
     pub fn on_claim_transfer(&mut self, amount: NearToken) {
+        self.payout_in_flight = None;
         // У перевода пустой результат, поэтому max_len = 0.
         let transferred = env::promise_result_checked(0, 0).is_ok();
         if transferred {
@@ -1108,6 +1121,22 @@ mod tests {
         goal
     }
 
+    /// Пришёл колбэк по выплате 5 NEAR; `balance_near` — баланс в этот момент.
+    fn callback(goal: &mut Goal, balance_near: u128, result: PromiseResult) {
+        set_callback_env(NearToken::from_near(balance_near), result);
+        goal.on_claim_transfer(NearToken::from_near(5));
+    }
+
+    /// `sync` от стороннего аккаунта при балансе `balance_near`.
+    fn sync_at(goal: &mut Goal, balance_near: u128) {
+        set_context_with(
+            stranger(),
+            NearToken::from_near(balance_near),
+            NearToken::from_near(0),
+        );
+        goal.sync();
+    }
+
     // SPEC 10, тест 10
     #[test]
     fn claim_pays_exactly_claimable() {
@@ -1117,9 +1146,11 @@ mod tests {
         assert_eq!(env::account_balance(), NearToken::from_near(10));
         assert_eq!(goal.last_balance, NearToken::from_near(10));
         assert_eq!(goal.get_balances().claimable, NearToken::from_near(0));
+        assert_eq!(goal.payout_in_flight, Some(NearToken::from_near(5)));
 
-        // Выплата — не «минус доход»: sync после неё ничего нового не видит.
-        goal.sync();
+        // Выплата — не «минус доход»: после колбэка sync ничего нового не видит.
+        callback(&mut goal, 10, PromiseResult::Successful(vec![]));
+        sync_at(&mut goal, 10);
         assert_eq!(goal.total_received, NearToken::from_near(10));
     }
 
@@ -1127,6 +1158,8 @@ mod tests {
     #[should_panic(expected = "Nothing to claim")]
     fn claim_twice_fails() {
         let mut goal = claimed_goal();
+        callback(&mut goal, 10, PromiseResult::Successful(vec![]));
+        set_context_with(creator(), NearToken::from_near(10), NearToken::from_near(0));
         let _ = goal.claim();
     }
 
@@ -1157,9 +1190,9 @@ mod tests {
     #[test]
     fn claim_callback_rolls_back_on_failure() {
         let mut goal = claimed_goal();
-        set_callback_env(NearToken::from_near(10), PromiseResult::Failed);
-        goal.on_claim_transfer(NearToken::from_near(5));
+        callback(&mut goal, 10, PromiseResult::Failed);
 
+        assert_eq!(goal.payout_in_flight, None);
         assert_eq!(goal.claimed, NearToken::from_near(0));
         assert_eq!(goal.last_balance, NearToken::from_near(15));
         assert_eq!(goal.get_balances().claimable, NearToken::from_near(5));
@@ -1171,9 +1204,9 @@ mod tests {
     #[test]
     fn claim_callback_keeps_counters_on_success() {
         let mut goal = claimed_goal();
-        set_callback_env(NearToken::from_near(10), PromiseResult::Successful(vec![]));
-        goal.on_claim_transfer(NearToken::from_near(5));
+        callback(&mut goal, 10, PromiseResult::Successful(vec![]));
 
+        assert_eq!(goal.payout_in_flight, None);
         assert_eq!(goal.claimed, NearToken::from_near(5));
         assert_eq!(goal.last_balance, NearToken::from_near(10));
         let logs = get_logs();
@@ -1201,6 +1234,10 @@ mod tests {
         let _ = goal.claim();
         assert_eq!(goal.claimed, NearToken::from_near(70));
         assert_eq!(goal.get_balances().forfeited, NearToken::from_near(15));
+
+        set_callback_env(NearToken::from_near(35), PromiseResult::Successful(vec![]));
+        goal.on_claim_transfer(NearToken::from_near(70));
+        set_context_with(creator(), NearToken::from_near(35), NearToken::from_near(0));
         let _ = goal.claim();
     }
 
@@ -1222,6 +1259,99 @@ mod tests {
         receive_and_sync(&mut goal, 10);
         // Хранение 1 600 000 байт = 16 NEAR, больше баланса.
         set_claim_env(creator(), NearToken::from_near(15), 1_600_000);
+        let _ = goal.claim();
+    }
+
+    // ---- Возврат неудачной выплаты (SPEC 5.1, 5.3) ----
+
+    #[test]
+    fn sync_never_lowers_last_balance() {
+        let mut goal = goal3();
+        receive_and_sync(&mut goal, 10);
+        sync_at(&mut goal, 12);
+        assert_eq!(goal.last_balance, NearToken::from_near(15));
+        assert_eq!(goal.total_received, NearToken::from_near(10));
+        assert!(get_logs().is_empty());
+    }
+
+    // (а) возврат пришёл после колбэка, между ними был sync.
+    #[test]
+    fn refund_after_callback_is_not_income() {
+        let mut goal = claimed_goal();
+        callback(&mut goal, 10, PromiseResult::Failed);
+        assert_eq!(goal.last_balance, NearToken::from_near(15));
+
+        // Денег ещё нет: баланс ниже last_balance, sync его не опускает.
+        sync_at(&mut goal, 10);
+        assert_eq!(goal.last_balance, NearToken::from_near(15));
+        assert!(get_logs().is_empty());
+
+        // Возврат пришёл.
+        sync_at(&mut goal, 15);
+        assert_eq!(goal.total_received, NearToken::from_near(10));
+        assert!(get_logs().is_empty());
+
+        // Креатор может забрать свои 5 заново — и не больше.
+        set_context_with(creator(), NearToken::from_near(15), NearToken::from_near(0));
+        let _ = goal.claim();
+        assert_eq!(goal.claimed, NearToken::from_near(5));
+    }
+
+    // (б) возврат пришёл до колбэка, между ними был sync.
+    #[test]
+    fn refund_before_callback_is_not_income() {
+        let mut goal = claimed_goal();
+
+        // Баланс вернулся к 15, но выплата в пути — sync пропущен.
+        sync_at(&mut goal, 15);
+        assert_eq!(goal.last_balance, NearToken::from_near(10));
+        assert_eq!(goal.total_received, NearToken::from_near(10));
+        assert!(get_logs().is_empty());
+
+        callback(&mut goal, 15, PromiseResult::Failed);
+        assert_eq!(goal.last_balance, NearToken::from_near(15));
+
+        sync_at(&mut goal, 15);
+        assert_eq!(goal.total_received, NearToken::from_near(10));
+        assert_eq!(goal.get_balances().claimable, NearToken::from_near(5));
+    }
+
+    // (в) настоящий доход во время выплаты — ровно один раз. Выплата прошла.
+    #[test]
+    fn income_during_successful_payout_counted_once() {
+        let mut goal = claimed_goal();
+        sync_at(&mut goal, 13); // пришло 3 NEAR, sync пропущен
+        assert_eq!(goal.total_received, NearToken::from_near(10));
+
+        callback(&mut goal, 13, PromiseResult::Successful(vec![]));
+        sync_at(&mut goal, 13);
+        assert_eq!(goal.total_received, NearToken::from_near(13));
+        sync_at(&mut goal, 13);
+        assert_eq!(goal.total_received, NearToken::from_near(13));
+    }
+
+    // (в) то же, но выплата не прошла и возврат пришёл последним.
+    #[test]
+    fn income_during_failed_payout_counted_once() {
+        let mut goal = claimed_goal();
+        callback(&mut goal, 13, PromiseResult::Failed); // 3 NEAR уже пришли, возврата нет
+        assert_eq!(goal.last_balance, NearToken::from_near(15));
+
+        sync_at(&mut goal, 13);
+        assert_eq!(goal.total_received, NearToken::from_near(10));
+
+        sync_at(&mut goal, 18); // возврат пришёл
+        assert_eq!(goal.total_received, NearToken::from_near(13));
+        sync_at(&mut goal, 18);
+        assert_eq!(goal.total_received, NearToken::from_near(13));
+    }
+
+    // (г)
+    #[test]
+    #[should_panic(expected = "Payout in progress")]
+    fn claim_during_payout_fails() {
+        let mut goal = claimed_goal();
+        set_context_with(creator(), NearToken::from_near(20), NearToken::from_near(0));
         let _ = goal.claim();
     }
 }

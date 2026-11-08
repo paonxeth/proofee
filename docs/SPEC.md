@@ -53,6 +53,7 @@ pub struct Goal {
     total_received: NearToken,     // весь доход за всё время
     claimed: NearToken,            // уже выплачено креатору
     last_balance: NearToken,       // баланс аккаунта после последнего sync или выплаты
+    payout_in_flight: Option<NearToken>, // выплата, по которой ещё не пришёл колбэк
 }
 
 pub struct Milestone {
@@ -76,12 +77,17 @@ pub enum MilestoneStatus { Pending, Submitted, Challenged, Accepted, Rejected, F
 
 - В конце `new`: `last_balance = env::account_balance()`. Стартовый депозит — не доход.
 - `sync()`:
+  - если стоит `payout_in_flight` — ничего не делать;
   - `b = env::account_balance()`;
   - если `b > last_balance`: `income = b - last_balance`, `total_received += income`,
-    событие `fees_synced`;
-  - в любом случае `last_balance = b`.
+    `last_balance = b`, событие `fees_synced`;
+  - иначе ничего не делать: `sync` никогда не уменьшает `last_balance`.
 - Баланс уменьшается только нашими выплатами, а `claim` сам уменьшает `last_balance`.
   Поэтому всё, что выросло сверх `last_balance`, — новый доход.
+- Если перевод креатору не прошёл, NEAR возвращаются отдельной refund-квитанцией — до
+  колбэка или после. Оба правила выше нужны, чтобы возврат ни при каком порядке не
+  посчитался доходом: пока выплата в пути, `sync` пропускается; после колбэка с откатом
+  баланс временно ниже `last_balance`, и `sync` его не опускает.
 - Контракту достаётся 30% газа, сожжённого в его методах. Это копейки, они тоже попадут
   в доход. В тестах суммы сравниваются с допуском.
 
@@ -112,15 +118,19 @@ claimable = I + U - claimed
 
 `claim()` — только `creator`:
 
+0. Если стоит `payout_in_flight` → ошибка `"Payout in progress"`.
 1. Вызвать `sync()`.
 2. `amount = claimable`.
 3. Ограничить: `amount ≤ account_balance − storage_usage × storage_byte_cost`,
    чтобы не тронуть деньги, которые держат хранение.
 4. Если `amount == 0` → ошибка `"Nothing to claim"`.
-5. `claimed += amount`, `last_balance -= amount`.
-6. `Promise::new(creator).transfer(amount)`, затем колбэк `on_claim_transfer(amount)`.
-7. Колбэк (`#[private]`): если перевод не прошёл — `claimed -= amount`,
-   `last_balance += amount`, событие `claim_failed`; иначе событие `claimed`.
+5. `claimed += amount`, `last_balance -= amount`, `payout_in_flight = Some(amount)`.
+6. `Promise::new(creator).transfer(amount)`, затем колбэк `on_claim_transfer(amount)`
+   с газом 10 TGas.
+7. Колбэк (`#[private]`): в обоих исходах `payout_in_flight = None`. Если перевод не
+   прошёл — `claimed -= amount`, `last_balance += amount`, событие `claim_failed`; иначе
+   событие `claimed`. В колбэке нет проверок, которые могут упасть: если он не выполнится,
+   флаг застрянет и `claim` и `sync` встанут навсегда.
 
 ## 6. Этапы и статусы
 
@@ -174,7 +184,7 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 `"Wrong status"`, `"Deadline passed"`, `"Window closed"`, `"Window still open"`,
 `"Nothing to claim"`, `"Weights must sum to 10000"`, `"No such milestone"`,
 `"Invalid proof hash"`, `"Creator cannot challenge"`, `"Reason too long"`,
-`"Deadline not passed"`.
+`"Deadline not passed"`, `"Payout in progress"`.
 
 ## 8. События (NEP-297)
 
