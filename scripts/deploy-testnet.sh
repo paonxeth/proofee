@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Черновая цель ProoFee в testnet (SPEC 11, шаг 1).
-# Собирает wasm, создаёт субаккаунт goal-<N>.<MASTER> с 3 NEAR, деплоит и вызывает new.
-# Full access ключ цели НЕ удаляется: это черновик.
+# Собирает wasm и одной транзакцией от MASTER создаёт goal-<N>.<MASTER>: create-account,
+# transfer 3 NEAR, deploy-contract, function-call new. Ключей у цели нет с рождения.
 #
 #   scripts/deploy-testnet.sh            # N — первый свободный номер
 #   N=5 scripts/deploy-testnet.sh        # N задан вручную
@@ -61,32 +61,19 @@ ARGS=$(cat <<EOF
 EOF
 )
 
-echo "== Создаю $GOAL с 3 NEAR"
-near account create-account fund-myself "$GOAL" '3 NEAR' \
-  autogenerate-new-keypair save-to-keychain \
-  sign-as "$MASTER" network-config "$NETWORK" sign-with-keychain send
-
-echo "== Деплою код"
-near contract deploy "$GOAL" use-file "$WASM" without-init-call \
-  network-config "$NETWORK" sign-with-keychain send
-
-# new подписывает MASTER, а не сам аккаунт цели: возврат неистраченного газа приходит
-# подписанту уже после new, и на счёте цели он выглядел бы доходом.
-echo "== Вызываю new от $MASTER"
-near contract call-function as-transaction "$GOAL" new json-args "$ARGS" \
-  prepaid-gas '100 Tgas' attached-deposit '0 NEAR' \
-  sign-as "$MASTER" network-config "$NETWORK" sign-with-keychain send
-
-# Между деплоем и new цель мог инициализировать кто-то другой: тогда наш new упал бы
-# выше. Проверяем, что параметры наши.
-GOAL_JSON=$(view "$GOAL" get_goal)
-if ! grep -q "\"creator\": \"$MASTER\"" <<<"$GOAL_JSON" ||
-  ! grep -q "\"verifier\": \"$VERIFIER\"" <<<"$GOAL_JSON"; then
-  echo "Цель инициализирована не нашими параметрами:" >&2
-  echo "$GOAL_JSON" >&2
-  exit 1
-fi
+# Одна транзакция: если любое действие упадёт, откатятся все, и окна между деплоем и new
+# нет. Подписант — MASTER, поэтому возврат неистраченного газа уходит ему, а не цели
+# (на счёте цели он выглядел бы доходом).
+echo "== Создаю $GOAL одной транзакцией от $MASTER"
+near transaction construct-transaction "$MASTER" receiver-id "$GOAL" \
+  add-action create-account \
+  add-action transfer '3 NEAR' \
+  add-action deploy-contract use-file "$WASM" without-init-call \
+  add-action function-call new json-args "$ARGS" prepaid-gas '100 Tgas' attached-deposit '0 NEAR' \
+  skip network-config "$NETWORK" sign-with-keychain send
 
 echo "== Готово: $GOAL"
-echo "$GOAL_JSON"
+view "$GOAL" get_goal
 view "$GOAL" get_balances
+echo "== Ключи $GOAL (должно быть пусто)"
+near account list-keys "$GOAL" network-config "$NETWORK" now
