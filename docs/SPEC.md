@@ -33,7 +33,7 @@ MVP работает только в testnet. Фисы в демо имитир�
 | `goal_title` | String | 1–100 символов | |
 | `goal_uri` | String | до 256 символов | ссылка на описание цели |
 | `immediate_bps` | u16 | ≤ 10000 | 5000 (50%) |
-| `challenge_window_ms` | u64 | > 0 | 120000 (2 минуты); по концепции 172800000 (48 ч) |
+| `challenge_window_ms` | u64 | > 0 | 120000 (2 минуты); по умолчанию 86400000 (24 ч) |
 | `milestones` | Vec<MilestoneInput> | 1–5 этапов, у каждого `weight_bps` > 0, сумма весов = 10000, `deadline_ms` > текущего времени, `title` 1–100 символов | |
 
 `MilestoneInput { title: String, weight_bps: u16, deadline_ms: u64 }`
@@ -224,10 +224,10 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 10. `claim`: платит ровно доступное, повторный claim → `"Nothing to claim"`, чужой аккаунт
     забрать не может, колбэк откатывает счётчики при неудаче.
 
-Интеграционный тест (`near-workspaces`, песочница):
+Интеграционный тест (`near-sandbox` + `near-api`, песочница):
 
-11. Деплой → перевод 10 NEAR → `sync` → пруф → ожидание окна → `finalize` → `claim` →
-    проверка балансов креатора и контракта.
+11. Деплой → перевод 10 NEAR → `sync` → пруф → сдвиг времени за окно (`fast_forward`) →
+    `finalize` → `claim` → проверка балансов креатора и контракта.
 
 ## 11. Демо-сценарий в testnet
 
