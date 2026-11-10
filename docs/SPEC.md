@@ -28,13 +28,13 @@ MVP работает только в testnet. Фисы в демо имитир�
 
 | Поле | Тип | Проверка в `new` | Демо |
 | --- | --- | --- | --- |
-| `creator` | AccountId | не равен `verifier` | аккаунт креатора |
-| `verifier` | AccountId | — | аккаунт команды |
+| `creator` | AccountId | не равен `verifier` и адресу контракта | аккаунт креатора |
+| `verifier` | AccountId | не равен адресу контракта | аккаунт команды |
 | `goal_title` | String | 1–100 символов | |
 | `goal_uri` | String | до 256 символов | ссылка на описание цели |
 | `immediate_bps` | u16 | ≤ 10000 | 5000 (50%) |
-| `challenge_window_ms` | u64 | > 0 | 120000 (2 минуты); по умолчанию 86400000 (24 ч) |
-| `milestones` | Vec<MilestoneInput> | 1–5 этапов, у каждого `weight_bps` > 0, сумма весов = 10000, `deadline_ms` > текущего времени, `title` 1–100 символов | |
+| `challenge_window_ms` | u64 | от 60000 (1 мин) до 2592000000 (30 дней) включительно | 120000 (2 минуты); по умолчанию 86400000 (24 ч) |
+| `milestones` | Vec<MilestoneInput> | 1–5 этапов, у каждого `weight_bps` > 0, сумма весов = 10000, `deadline_ms` > текущего времени и ≤ текущее время + 31536000000 (365 дней), `title` 1–100 символов | |
 
 `MilestoneInput { title: String, weight_bps: u16, deadline_ms: u64 }`
 
@@ -183,6 +183,13 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 `"Nothing to claim"`, `"Weights must sum to 10000"`, `"No such milestone"`,
 `"Invalid proof hash"`, `"Creator cannot challenge"`, `"Reason too long"`,
 `"Deadline not passed"`, `"Payout in progress"`.
+
+Ошибки проверок `new` и служебные: `"Creator and verifier must differ"`,
+`"Creator cannot be the contract"`, `"Verifier cannot be the contract"`,
+`"Goal title must be 1-100 chars"`, `"Milestone title must be 1-100 chars"`, `"URI too long"`,
+`"immediate_bps must be <= 10000"`, `"Window too short"`, `"Window too long"`,
+`"Need 1-5 milestones"`, `"Weight must be > 0"`, `"Deadline must be in future"`,
+`"Deadline too far"`, `"Token already set"`, `"Math overflow"`, `"No submission time"`.
 
 ## 8. События (NEP-297)
 

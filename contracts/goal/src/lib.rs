@@ -13,6 +13,12 @@ const MAX_URI_LEN: usize = 256;
 const MAX_REASON_LEN: usize = 280;
 const PROOF_HASH_LEN: usize = 64;
 const CALLBACK_GAS: Gas = Gas::from_tgas(10);
+const DAY_MS: u64 = 86_400_000;
+/// Окно спора: не короче минуты (иначе оспорить не успеть) и не длиннее 30 дней.
+const MIN_CHALLENGE_WINDOW_MS: u64 = 60_000;
+const MAX_CHALLENGE_WINDOW_MS: u64 = 30 * DAY_MS;
+/// Дедлайн этапа — не дальше года от момента `new`.
+const MAX_DEADLINE_AHEAD_MS: u64 = 365 * DAY_MS;
 
 /// Этап, как его передают в `new`.
 #[near(serializers = [json])]
@@ -126,24 +132,39 @@ impl Goal {
         milestones: Vec<MilestoneInput>,
     ) -> Self {
         require!(creator != verifier, "Creator and verifier must differ");
+        // У цели нет ключей: от её имени никто не вызовет claim или resolve.
+        let this = env::current_account_id();
+        require!(creator != this, "Creator cannot be the contract");
+        require!(verifier != this, "Verifier cannot be the contract");
         require!(title_ok(&goal_title), "Goal title must be 1-100 chars");
         require!(goal_uri.chars().count() <= MAX_URI_LEN, "URI too long");
         require!(
             immediate_bps <= BPS_DENOMINATOR,
             "immediate_bps must be <= 10000"
         );
-        require!(challenge_window_ms > 0, "Window must be > 0");
+        require!(
+            challenge_window_ms >= MIN_CHALLENGE_WINDOW_MS,
+            "Window too short"
+        );
+        require!(
+            challenge_window_ms <= MAX_CHALLENGE_WINDOW_MS,
+            "Window too long"
+        );
         require!(
             (1..=MAX_MILESTONES).contains(&milestones.len()),
             "Need 1-5 milestones"
         );
 
         let now_ms = env::block_timestamp_ms();
+        let latest_deadline_ms = now_ms
+            .checked_add(MAX_DEADLINE_AHEAD_MS)
+            .unwrap_or_else(|| math::overflow());
         let mut weight_sum: u32 = 0;
         for m in &milestones {
             require!(m.weight_bps > 0, "Weight must be > 0");
             require!(title_ok(&m.title), "Milestone title must be 1-100 chars");
             require!(m.deadline_ms > now_ms, "Deadline must be in future");
+            require!(m.deadline_ms <= latest_deadline_ms, "Deadline too far");
             weight_sum = weight_sum
                 .checked_add(u32::from(m.weight_bps))
                 .unwrap_or_else(|| env::panic_str("Weights must sum to 10000"));
@@ -470,7 +491,6 @@ mod tests {
     use near_sdk::{PromiseResult, testing_env};
 
     const NOW_MS: u64 = 1_000_000;
-    const DAY_MS: u64 = 86_400_000;
 
     fn creator() -> AccountId {
         "creator.testnet".parse().unwrap()
@@ -651,10 +671,69 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Window must be > 0")]
+    #[should_panic(expected = "Window too short")]
     fn new_rejects_zero_window() {
         set_context(creator());
         new_goal_with("Goal", "", 5000, 0, milestones(&[10_000]));
+    }
+
+    // AUDIT M-2: окно в 1 мс делало оспаривание невозможным.
+    #[test]
+    #[should_panic(expected = "Window too short")]
+    fn new_rejects_window_below_minute() {
+        set_context(creator());
+        new_goal_with("Goal", "", 5000, 59_999, milestones(&[10_000]));
+    }
+
+    // AUDIT L-3: окно u64::MAX ломало window_end и запирало этап в Submitted.
+    #[test]
+    #[should_panic(expected = "Window too long")]
+    fn new_rejects_window_above_30_days() {
+        set_context(creator());
+        new_goal_with("Goal", "", 5000, 30 * DAY_MS + 1, milestones(&[10_000]));
+    }
+
+    // AUDIT L-3: дедлайн в далёком будущем не давал этапу провалиться.
+    #[test]
+    #[should_panic(expected = "Deadline too far")]
+    fn new_rejects_deadline_beyond_year() {
+        set_context(creator());
+        let mut ms = milestones(&[10_000]);
+        ms[0].deadline_ms = NOW_MS + 365 * DAY_MS + 1;
+        new_goal_with("Goal", "", 5000, 120_000, ms);
+    }
+
+    #[test]
+    fn new_accepts_upper_limits() {
+        set_context(creator());
+        let mut ms = milestones(&[10_000]);
+        ms[0].deadline_ms = NOW_MS + 365 * DAY_MS;
+        let goal = new_goal_with("Goal", "", 5000, 30 * DAY_MS, ms);
+        assert_eq!(goal.get_goal().challenge_window_ms, 30 * DAY_MS);
+    }
+
+    // AUDIT L-4: у цели нет ключей, claim от её имени вызвать некому.
+    #[test]
+    #[should_panic(expected = "Creator cannot be the contract")]
+    fn new_rejects_creator_equal_to_contract() {
+        set_context(creator());
+        Goal::new(
+            "goal.testnet".parse().unwrap(),
+            verifier(),
+            "Goal".to_string(),
+            String::new(),
+            5000,
+            120_000,
+            milestones(&[10_000]),
+        );
+    }
+
+    // AUDIT L-4: resolve от имени цели вызвать некому, споры зависли бы навсегда.
+    #[test]
+    #[should_panic(expected = "Verifier cannot be the contract")]
+    fn new_rejects_verifier_equal_to_contract() {
+        set_context(creator());
+        new_goal("goal.testnet".parse().unwrap(), milestones(&[10_000]));
     }
 
     #[test]
@@ -664,7 +743,7 @@ mod tests {
         let mut ms = milestones(&[10_000]);
         ms[0].title = "я".repeat(100);
         ms[0].deadline_ms = NOW_MS + 1;
-        let goal = new_goal_with(&"я".repeat(100), &"a".repeat(256), 10_000, 1, ms);
+        let goal = new_goal_with(&"я".repeat(100), &"a".repeat(256), 10_000, 60_000, ms);
         assert_eq!(goal.get_goal().immediate_bps, 10_000);
     }
 
