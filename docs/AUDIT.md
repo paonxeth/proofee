@@ -385,3 +385,47 @@ README и на фронте. До mainnet нужны `sync_ft` и выплата
 **Не трогать до дедлайна:** `assert_one_yocto` (L-6, меняет UX и SPEC), приём токенов
 (I-5), `challenger != verifier` (M-3: защищает слабо; можно добавить, если пункты 1–2
 уже готовы, но правильное решение — мультисиг или DAO).
+
+---
+
+## Статус исправлений
+
+Обновлено 10 ноября 2026. Каждое исправление шло в порядке: SPEC → код → тест →
+`cargo test`. После последнего коммита: 79 юнит-тестов и 3 интеграционных, всё зелёное.
+В testnet ничего не деплоилось.
+
+### Исправлено
+
+| ID | Коммит | Что сделано | Тесты |
+| --- | --- | --- | --- |
+| M-2 | `b38aaf2` | окно спора от 60 000 до 2 592 000 000 мс (1 мин – 30 дней) | `new_rejects_window_below_minute`, `new_rejects_zero_window` |
+| L-3 | `b38aaf2` | окно ≤ 30 дней, дедлайн ≤ now + 365 дней | `new_rejects_window_above_30_days`, `new_rejects_deadline_beyond_year`, `new_accepts_upper_limits` |
+| L-4 | `b38aaf2` | creator и verifier ≠ адрес контракта | `new_rejects_creator_equal_to_contract`, `new_rejects_verifier_equal_to_contract` |
+| — | `b38aaf2` | все тексты ошибок `new` и служебные дописаны в SPEC 7 | — |
+| L-1 | `6b2f445` | `claim` не выплачивает стоимость `storage_usage + 16 000` байт | `claim_keeps_storage_reserve` (без запаса выплата была бы 4,16 NEAR вместо 4) |
+| L-2 | `6b2f445` | в конце `new` баланс ≥ стоимость `storage_usage + 2 × 16 000` байт (≈ 0,32 NEAR сверх кода) | `new_rejects_deposit_below_storage_reserve`, `new_accepts_exact_storage_reserve`; интеграционный `new_requires_storage_deposit`: 3 NEAR, как в `deploy-testnet.sh`, проходят даже со строками максимальной длины, 1,9 NEAR отклоняются |
+| M-1 | `3979e55` | `challenged_at_ms`; `resolve_timeout` (любой, через 24 ч после спора → Accepted); после 24 ч `resolve` закрыт | `resolve_works_until_timeout`, `resolve_rejects_after_timeout`, `resolve_timeout_rejects_before_timeout`, `resolve_timeout_accepts_for_creator`, `resolve_timeout_requires_challenge` |
+| L-5 (верификатор) | `3979e55`, `cc32d3a` | удалённый верификатор больше не замораживает этапы (таймаут); в `deploy-testnet.sh` верификатор по умолчанию — `verifier.$MASTER` | — |
+| I-4 | `cc32d3a` | удалены `contracts/goal/.github` (шаблонный CI с `without-init-call`) и шаблонный `README.md` | — |
+| I-8 (Cargo.toml) | `cc32d3a` | заполнены `description` и `repository` для NEP-330 | — |
+
+### Оставлено
+
+| ID | Почему |
+| --- | --- |
+| M-3 | Проверка `challenger != verifier` обходится вторым аккаунтом. Настоящее решение — верификатор-мультисиг или DAO и залог за спор, это вне MVP. Таймаут из M-1 тут не помогает: верификатор отклоняет в пределах 24 ч. |
+| L-5 (креатор) | Если креатор удалит аккаунт верхнего уровня, имя может занять чужой человек и забрать доступное. Это решается организационно: не удалять аккаунт креатора. |
+| L-5 (демо) | В `deploy-testnet.sh` creator = `MASTER`, а верификатор — его субаккаунт. В демо команда и креатор — один человек, это нормально. Для настоящих целей верификатор не должен принадлежать креатору. |
+| L-6 | `assert_one_yocto` меняет SPEC 7 и UX (каждый `resolve` подтверждается в кошельке). Отложено до после хакатона; пока фронт не должен запрашивать function-call ключ на контракт цели. |
+| I-2 | Нужна правка во фронте: не показывать `unsynced`, пока выплата в пути. |
+| I-3 | Безопасно как есть, правка необязательная. |
+| I-5 | Токены вне MVP. README удалён в `cc32d3a`, поэтому предупреждение «не отправлять токены на цель» должно быть во фронте. До mainnet нужны `sync_ft` и выплата токенов. |
+| I-7 | Предупреждение о конце окна спора — задача фронта. |
+| I-8 (остальное) | Пустые `proof_uri`/`reason` и непроверяемый `set_token` вреда не несут. |
+
+### Что изменилось для фронта и демо
+
+- Новый метод `resolve_timeout(index)` и поле `challenged_at_ms` в `get_goal().milestones`.
+- Демо-сценарий SPEC 11 не меняется: окно 120 000 мс в допустимых пределах, а
+  `resolve` в шаге 5 делается сразу, задолго до 24 ч.
+- Перед запуском `deploy-testnet.sh` нужно создать `verifier.proofee-anton.testnet`.
