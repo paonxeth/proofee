@@ -10,7 +10,8 @@ set -euo pipefail
 
 NETWORK=testnet # только testnet, параметра нет
 MASTER="${MASTER:-proofee-anton.testnet}"
-VERIFIER="${VERIFIER:-proofee-verifier.testnet}"
+# Субаккаунт MASTER: после удаления его может пересоздать только MASTER (AUDIT L-5).
+VERIFIER="${VERIFIER:-verifier.$MASTER}"
 DAY_MS=86400000
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
