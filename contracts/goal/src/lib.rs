@@ -19,6 +19,9 @@ const MIN_CHALLENGE_WINDOW_MS: u64 = 60_000;
 const MAX_CHALLENGE_WINDOW_MS: u64 = 30 * DAY_MS;
 /// Дедлайн этапа — не дальше года от момента `new`.
 const MAX_DEADLINE_AHEAD_MS: u64 = 365 * DAY_MS;
+/// Запас хранения, который `claim` никогда не выплачивает (SPEC 3, 5.3). Покрывает
+/// 16 байт `payout_in_flight` и рост состояния: полное состояние цели ≈ 15 КБ.
+const STORAGE_RESERVE_BYTES: u64 = 16_000;
 
 /// Этап, как его передают в `new`.
 #[near(serializers = [json])]
@@ -111,6 +114,14 @@ fn is_valid_proof_hash(hash: &str) -> bool {
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
+/// Стоимость хранения текущего `storage_usage` плюс `reserve_bytes`, в yoctoNEAR.
+fn storage_cost_with_reserve(reserve_bytes: u64) -> u128 {
+    u128::from(env::storage_usage())
+        .checked_add(u128::from(reserve_bytes))
+        .and_then(|bytes| bytes.checked_mul(env::storage_byte_cost().as_yoctonear()))
+        .unwrap_or_else(|| math::overflow())
+}
+
 /// Момент, когда закрывается окно спора по поданному пруфу.
 fn window_end(m: &Milestone, challenge_window_ms: u64) -> u64 {
     m.submitted_at_ms
@@ -188,6 +199,13 @@ impl Goal {
                 challenge_reason: None,
             })
             .collect::<Vec<_>>();
+
+        // Один резерв claim не выплачивает, второй уходит на рост состояния (SPEC 3).
+        require!(
+            env::account_balance().as_yoctonear()
+                >= storage_cost_with_reserve(2 * STORAGE_RESERVE_BYTES),
+            "Deposit too small for storage"
+        );
 
         events::emit(
             "goal_created",
@@ -349,10 +367,9 @@ impl Goal {
         self.sync();
 
         let claimable = self.breakdown().claimable;
-        // Деньги, которые держат хранение, не выплачиваем.
-        let storage_cost = u128::from(env::storage_usage())
-            .checked_mul(env::storage_byte_cost().as_yoctonear())
-            .unwrap_or_else(|| math::overflow());
+        // Деньги, которые держат хранение, не выплачиваем. Запас покрывает 16 байт
+        // payout_in_flight: near-sdk запишет их уже после этого расчёта (AUDIT L-1).
+        let storage_cost = storage_cost_with_reserve(STORAGE_RESERVE_BYTES);
         // Хранение дороже баланса → свободно 0 (вычитание с упором в ноль).
         let free = env::account_balance()
             .as_yoctonear()
@@ -710,6 +727,28 @@ mod tests {
         ms[0].deadline_ms = NOW_MS + 365 * DAY_MS;
         let goal = new_goal_with("Goal", "", 5000, 30 * DAY_MS, ms);
         assert_eq!(goal.get_goal().challenge_window_ms, 30 * DAY_MS);
+    }
+
+    /// `new` при балансе `balance` и хранении по умолчанию в моке (307 200 байт).
+    fn new_with_balance(balance: NearToken) -> Goal {
+        set_context_with(creator(), balance, NearToken::from_near(0));
+        new_goal(verifier(), milestones(&[10_000]))
+    }
+
+    /// Минимальный депозит: (307 200 + 2 × 16 000) байт × 10^19 yocto.
+    const MIN_DEPOSIT_YOCTO: u128 = 339_200 * 10_000_000_000_000_000_000;
+
+    // AUDIT L-2: без запаса хранение оплачивалось бы из дохода креатора.
+    #[test]
+    #[should_panic(expected = "Deposit too small for storage")]
+    fn new_rejects_deposit_below_storage_reserve() {
+        new_with_balance(NearToken::from_yoctonear(MIN_DEPOSIT_YOCTO - 1));
+    }
+
+    #[test]
+    fn new_accepts_exact_storage_reserve() {
+        let goal = new_with_balance(NearToken::from_yoctonear(MIN_DEPOSIT_YOCTO));
+        assert_eq!(goal.total_received, NearToken::from_yoctonear(0));
     }
 
     // AUDIT L-4: у цели нет ключей, claim от её имени вызвать некому.
@@ -1342,8 +1381,9 @@ mod tests {
     fn claim_keeps_storage_reserve() {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
-        // Хранение 1 100 000 байт = 11 NEAR. Свободно 15 − 11 = 4 < доступных 5.
-        set_claim_env(creator(), NearToken::from_near(15), 1_100_000);
+        // Хранение 1 084 000 байт + запас 16 000 = 11 NEAR. Свободно 15 − 11 = 4 < 5.
+        // Без запаса (AUDIT L-1) выплата была бы 4,16 NEAR.
+        set_claim_env(creator(), NearToken::from_near(15), 1_084_000);
         let _ = goal.claim();
         assert_eq!(goal.claimed, NearToken::from_near(4));
         assert_eq!(goal.get_balances().claimable, NearToken::from_near(1));

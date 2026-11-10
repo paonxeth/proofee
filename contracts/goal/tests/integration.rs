@@ -30,6 +30,7 @@ struct User {
 struct Env {
     // Песочница живёт, пока жив Env: при drop процесс останавливается.
     sandbox: Sandbox,
+    wasm: Vec<u8>,
     net: NetworkConfig,
     genesis: User,
     creator: User,
@@ -86,35 +87,48 @@ async fn setup() -> TestResult<Env> {
         ],
     });
 
-    // Как scripts/deploy-testnet.sh: одна транзакция от creator, у цели нет ключей.
     let goal: AccountId = format!("goal.{}", creator.id).parse()?;
-    Transaction::construct(creator.id.clone(), goal.clone())
-        .add_actions(vec![
-            Action::CreateAccount(CreateAccountAction {}),
-            Action::Transfer(TransferAction {
-                deposit: NearToken::from_near(5),
-            }),
-            Action::DeployContract(DeployContractAction { code: wasm }),
-            Action::FunctionCall(Box::new(FunctionCallAction {
-                method_name: "new".to_string(),
-                args: serde_json::to_vec(&args)?,
-                gas: NearGas::from_tgas(100),
-                deposit: NearToken::from_near(0),
-            })),
-        ])
-        .with_signer(creator.signer.clone())
-        .send_to(&net)
+    deploy_goal(&net, &creator, &goal, &wasm, &args, NearToken::from_near(5))
         .await?
         .assert_success();
 
     Ok(Env {
         sandbox,
+        wasm,
         net,
         genesis,
         creator,
         stranger,
         goal,
     })
+}
+
+/// Как scripts/deploy-testnet.sh: одна транзакция от `owner`, у цели нет ключей.
+async fn deploy_goal(
+    net: &NetworkConfig,
+    owner: &User,
+    goal: &AccountId,
+    wasm: &[u8],
+    args: &Value,
+    deposit: NearToken,
+) -> TestResult<TransactionResult> {
+    Ok(Transaction::construct(owner.id.clone(), goal.clone())
+        .add_actions(vec![
+            Action::CreateAccount(CreateAccountAction {}),
+            Action::Transfer(TransferAction { deposit }),
+            Action::DeployContract(DeployContractAction {
+                code: wasm.to_vec(),
+            }),
+            Action::FunctionCall(Box::new(FunctionCallAction {
+                method_name: "new".to_string(),
+                args: serde_json::to_vec(args)?,
+                gas: NearGas::from_tgas(100),
+                deposit: NearToken::from_near(0),
+            })),
+        ])
+        .with_signer(owner.signer.clone())
+        .send_to(net)
+        .await?)
 }
 
 impl Env {
@@ -255,5 +269,41 @@ async fn on_claim_transfer_is_private() -> TestResult {
     );
     assert!(err.contains("is private"), "{err}");
     assert_eq!(env.balances().await?, before);
+    Ok(())
+}
+
+/// SPEC 3: депозит должен покрыть хранение и 2 × 16 000 байт запаса (AUDIT L-1, L-2).
+/// 3 NEAR, как в scripts/deploy-testnet.sh, хватает даже на строки максимальной длины;
+/// 1,9 NEAR — нет (код ≈ 1,6 NEAR + запас 0,32 NEAR).
+#[tokio::test]
+async fn new_requires_storage_deposit() -> TestResult {
+    let env = setup().await?;
+    let now_ms = block_time_ms(&env.net).await?;
+    // 4-байтные символы: максимум байтов при лимитах в символах.
+    let long = "𝕏".repeat(100);
+    let milestones: Vec<Value> = (0..5)
+        .map(|_| json!({"title": long, "weight_bps": 2000, "deadline_ms": now_ms + 7 * DAY_MS}))
+        .collect();
+    let args = json!({
+        "creator": env.creator.id,
+        "verifier": env.stranger.id,
+        "goal_title": long,
+        "goal_uri": "𝕏".repeat(256),
+        "immediate_bps": 5000,
+        "challenge_window_ms": WINDOW_MS,
+        "milestones": milestones,
+    });
+
+    let small: AccountId = format!("small.{}", env.creator.id).parse()?;
+    let deposit = NearToken::from_millinear(1_900);
+    let result = deploy_goal(&env.net, &env.creator, &small, &env.wasm, &args, deposit).await?;
+    let err = failure(result);
+    assert!(err.contains("Deposit too small for storage"), "{err}");
+
+    let max: AccountId = format!("max.{}", env.creator.id).parse()?;
+    let deposit = NearToken::from_near(3);
+    deploy_goal(&env.net, &env.creator, &max, &env.wasm, &args, deposit)
+        .await?
+        .assert_success();
     Ok(())
 }

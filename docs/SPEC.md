@@ -38,6 +38,13 @@ MVP работает только в testnet. Фисы в демо имитир�
 
 `MilestoneInput { title: String, weight_bps: u16, deadline_ms: u64 }`
 
+Депозит: в конце `new` баланс аккаунта должен быть не меньше
+`(storage_usage + 2 × STORAGE_RESERVE_BYTES) × storage_byte_cost`, где
+`STORAGE_RESERVE_BYTES = 16000` (≈ 0,32 NEAR сверх кода и аккаунта), иначе
+`"Deposit too small for storage"`. Один резерв `claim` никогда не выплачивает (п. 5.3),
+второй уходит на рост состояния (пруфы, споры). Так хранение не оплачивается из дохода
+креатора, а `challenge` и `submit_proof` всегда могут записать данные.
+
 ## 4. Состояние
 
 ```rust
@@ -119,8 +126,10 @@ claimable = I + U - claimed
 0. Если стоит `payout_in_flight` → ошибка `"Payout in progress"`.
 1. Вызвать `sync()`.
 2. `amount = claimable`.
-3. Ограничить: `amount ≤ account_balance − storage_usage × storage_byte_cost`,
-   чтобы не тронуть деньги, которые держат хранение.
+3. Ограничить: `amount ≤ account_balance − (storage_usage + STORAGE_RESERVE_BYTES) ×
+   storage_byte_cost`, чтобы не тронуть деньги, которые держат хранение. Запас нужен,
+   потому что `storage_usage` не включает 16 байт `payout_in_flight`, которые `claim`
+   запишет сам, и будущий рост состояния (полное состояние цели ≈ 15 КБ).
 4. Если `amount == 0` → ошибка `"Nothing to claim"`.
 5. `claimed += amount`, `last_balance -= amount`, `payout_in_flight = Some(amount)`.
 6. `Promise::new(creator).transfer(amount)`, затем колбэк `on_claim_transfer(amount)`
@@ -189,7 +198,7 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 `"Goal title must be 1-100 chars"`, `"Milestone title must be 1-100 chars"`, `"URI too long"`,
 `"immediate_bps must be <= 10000"`, `"Window too short"`, `"Window too long"`,
 `"Need 1-5 milestones"`, `"Weight must be > 0"`, `"Deadline must be in future"`,
-`"Deadline too far"`, `"Token already set"`, `"Math overflow"`, `"No submission time"`.
+`"Deadline too far"`, `"Deposit too small for storage"`, `"Token already set"`, `"Math overflow"`, `"No submission time"`.
 
 ## 8. События (NEP-297)
 
