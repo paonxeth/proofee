@@ -73,6 +73,7 @@ pub struct Milestone {
     submitted_at_ms: Option<u64>,
     challenger: Option<AccountId>,
     challenge_reason: Option<String>,
+    challenged_at_ms: Option<u64>, // когда оспорили; от него считается таймаут спора
 }
 
 pub enum MilestoneStatus { Pending, Submitted, Challenged, Accepted, Rejected, Failed }
@@ -146,12 +147,17 @@ claimable = I + U - claimed
 | Pending → Submitted | `submit_proof` | только `creator` | `now < deadline_ms` |
 | Submitted → Challenged | `challenge` | любой, кроме `creator` | `now < submitted_at_ms + challenge_window_ms` |
 | Submitted → Accepted | `finalize` | любой | `now ≥ submitted_at_ms + challenge_window_ms` |
-| Challenged → Accepted / Rejected | `resolve` | только `verifier` | — |
+| Challenged → Accepted / Rejected | `resolve` | только `verifier` | `now < challenged_at_ms + RESOLVE_TIMEOUT_MS` |
+| Challenged → Accepted | `resolve_timeout` | любой | `now ≥ challenged_at_ms + RESOLVE_TIMEOUT_MS` |
 | Pending → Failed | `expire` | любой | `now ≥ deadline_ms` |
 
 - Accepted, Rejected и Failed — конечные статусы.
 - Пруф, поданный до дедлайна, проходит, даже если окно спора закончится после дедлайна.
 - Оспорить пруф можно только один раз: после `challenge` статус уже Challenged.
+- `RESOLVE_TIMEOUT_MS = 86400000` (24 ч), константа. Если верификатор не решил спор за
+  24 часа, этап засчитывается креатору: спор бесплатный, и исход «отклонить» по умолчанию
+  позволил бы любому сжечь долю этапа. После таймаута `resolve` уже не работает, даже если
+  `resolve_timeout` ещё никто не вызвал.
 - Время — `env::block_timestamp_ms()`.
 
 ## 7. Методы
@@ -169,6 +175,7 @@ pub fn submit_proof(&mut self, index: u8, proof_uri: String, proof_hash: String)
 pub fn challenge(&mut self, index: u8, reason: String)          // любой, кроме creator
 pub fn finalize(&mut self, index: u8)                           // любой
 pub fn resolve(&mut self, index: u8, accept: bool)              // verifier
+pub fn resolve_timeout(&mut self, index: u8)                    // любой
 pub fn expire(&mut self, index: u8)                             // любой
 pub fn claim(&mut self) -> Promise                              // creator
 #[private] pub fn on_claim_transfer(&mut self, amount: NearToken)
@@ -191,7 +198,8 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 `"Wrong status"`, `"Deadline passed"`, `"Window closed"`, `"Window still open"`,
 `"Nothing to claim"`, `"Weights must sum to 10000"`, `"No such milestone"`,
 `"Invalid proof hash"`, `"Creator cannot challenge"`, `"Reason too long"`,
-`"Deadline not passed"`, `"Payout in progress"`.
+`"Deadline not passed"`, `"Payout in progress"`, `"Resolve time passed"`,
+`"Resolve time not passed"`.
 
 Ошибки проверок `new` и служебные: `"Creator and verifier must differ"`,
 `"Creator cannot be the contract"`, `"Verifier cannot be the contract"`,
@@ -237,6 +245,8 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 7. `finalize` после окна → Accepted, разлочивается нужная сумма.
 8. `resolve`: только verifier; отказ сжигает долю этапа, в том числе из будущих фисов.
 9. `expire` после дедлайна → Failed.
+9а. `resolve_timeout`: до 24 ч после `challenge` → ошибка, после → Accepted от любого;
+    `resolve` после 24 ч → `"Resolve time passed"`.
 10. `claim`: платит ровно доступное, повторный claim → `"Nothing to claim"`, чужой аккаунт
     забрать не может, колбэк откатывает счётчики при неудаче.
 

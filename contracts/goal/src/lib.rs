@@ -22,6 +22,8 @@ const MAX_DEADLINE_AHEAD_MS: u64 = 365 * DAY_MS;
 /// Запас хранения, который `claim` никогда не выплачивает (SPEC 3, 5.3). Покрывает
 /// 16 байт `payout_in_flight` и рост состояния: полное состояние цели ≈ 15 КБ.
 const STORAGE_RESERVE_BYTES: u64 = 16_000;
+/// Сколько верификатор может решать спор; потом этап засчитывается креатору (SPEC 6).
+const RESOLVE_TIMEOUT_MS: u64 = DAY_MS;
 
 /// Этап, как его передают в `new`.
 #[near(serializers = [json])]
@@ -54,6 +56,7 @@ pub struct Milestone {
     pub submitted_at_ms: Option<u64>,
     pub challenger: Option<AccountId>,
     pub challenge_reason: Option<String>,
+    pub challenged_at_ms: Option<u64>,
 }
 
 /// Ответ `get_goal`: параметры цели и этапы. Деньги — в `get_balances`.
@@ -112,6 +115,14 @@ fn is_valid_proof_hash(hash: &str) -> bool {
         && hash
             .bytes()
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// Момент, когда истекает время верификатора на решение спора.
+fn resolve_deadline(m: &Milestone) -> u64 {
+    m.challenged_at_ms
+        .unwrap_or_else(|| env::panic_str("No challenge time"))
+        .checked_add(RESOLVE_TIMEOUT_MS)
+        .unwrap_or_else(|| math::overflow())
 }
 
 /// Стоимость хранения текущего `storage_usage` плюс `reserve_bytes`, в yoctoNEAR.
@@ -197,6 +208,7 @@ impl Goal {
                 submitted_at_ms: None,
                 challenger: None,
                 challenge_reason: None,
+                challenged_at_ms: None,
             })
             .collect::<Vec<_>>();
 
@@ -308,6 +320,7 @@ impl Goal {
         m.status = MilestoneStatus::Challenged;
         m.challenger = Some(challenger.clone());
         m.challenge_reason = Some(reason.clone());
+        m.challenged_at_ms = Some(now_ms);
         events::emit(
             "proof_challenged",
             json!({ "index": index, "challenger": challenger, "reason": reason }),
@@ -327,21 +340,35 @@ impl Goal {
         emit_resolved(index, &m.status);
     }
 
-    /// Challenged → Accepted / Rejected. Только verifier.
+    /// Challenged → Accepted / Rejected. Только verifier, в течение 24 ч после спора.
     pub fn resolve(&mut self, index: u8, accept: bool) {
         self.check_index(index);
         require!(
             env::predecessor_account_id() == self.verifier,
             "Only verifier"
         );
+        let now_ms = env::block_timestamp_ms();
         let m = &mut self.milestones[usize::from(index)];
         require!(m.status == MilestoneStatus::Challenged, "Wrong status");
+        require!(now_ms < resolve_deadline(m), "Resolve time passed");
 
         m.status = if accept {
             MilestoneStatus::Accepted
         } else {
             MilestoneStatus::Rejected
         };
+        emit_resolved(index, &m.status);
+    }
+
+    /// Challenged → Accepted. Любой, если верификатор не решил спор за 24 ч (AUDIT M-1).
+    pub fn resolve_timeout(&mut self, index: u8) {
+        self.check_index(index);
+        let now_ms = env::block_timestamp_ms();
+        let m = &mut self.milestones[usize::from(index)];
+        require!(m.status == MilestoneStatus::Challenged, "Wrong status");
+        require!(now_ms >= resolve_deadline(m), "Resolve time not passed");
+
+        m.status = MilestoneStatus::Accepted;
         emit_resolved(index, &m.status);
     }
 
@@ -1022,6 +1049,7 @@ mod tests {
         assert_eq!(m.status, MilestoneStatus::Challenged);
         assert_eq!(m.challenger, Some(stranger()));
         assert_eq!(m.challenge_reason.as_deref(), Some("Fake screenshot"));
+        assert_eq!(m.challenged_at_ms, Some(NOW_MS + WINDOW_MS - 1));
         assert!(get_logs()[0].contains(r#""event":"proof_challenged""#));
     }
 
@@ -1169,6 +1197,56 @@ mod tests {
         set_time(verifier(), NOW_MS + 2);
         goal.resolve(1, false);
         goal.resolve(1, true);
+    }
+
+    // ---- Таймаут спора (SPEC 6, AUDIT M-1). challenged() оспаривает в NOW_MS + 1. ----
+
+    #[test]
+    fn resolve_works_until_timeout() {
+        let mut goal = challenged(1);
+        set_time(verifier(), NOW_MS + 1 + DAY_MS - 1);
+        goal.resolve(1, false);
+        assert_eq!(status(&goal, 1), MilestoneStatus::Rejected);
+    }
+
+    #[test]
+    #[should_panic(expected = "Resolve time passed")]
+    fn resolve_rejects_after_timeout() {
+        let mut goal = challenged(1);
+        set_time(verifier(), NOW_MS + 1 + DAY_MS);
+        goal.resolve(1, false);
+    }
+
+    #[test]
+    #[should_panic(expected = "Resolve time not passed")]
+    fn resolve_timeout_rejects_before_timeout() {
+        let mut goal = challenged(0);
+        set_time(stranger(), NOW_MS + 1 + DAY_MS - 1);
+        goal.resolve_timeout(0);
+    }
+
+    #[test]
+    fn resolve_timeout_accepts_for_creator() {
+        let mut goal = challenged(0);
+        set_time(stranger(), NOW_MS + 1 + DAY_MS);
+        goal.resolve_timeout(0);
+
+        assert_eq!(status(&goal, 0), MilestoneStatus::Accepted);
+        // 10 NEAR: сразу 5, этап 0 (40%) разлочивает 2.
+        assert_eq!(goal.get_balances().claimable, NearToken::from_near(7));
+        let logs = get_logs();
+        assert!(logs[0].contains(r#""event":"milestone_resolved""#));
+        assert!(logs[0].contains(r#""status":"Accepted""#));
+        assert!(logs[0].contains(r#""by":"stranger.testnet""#));
+    }
+
+    #[test]
+    #[should_panic(expected = "Wrong status")]
+    fn resolve_timeout_requires_challenge() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(stranger(), NOW_MS + 2 * DAY_MS);
+        goal.resolve_timeout(0);
     }
 
     #[test]
