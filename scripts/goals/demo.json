@@ -1,0 +1,11 @@
+{
+  "goal_title": "Demo goal",
+  "goal_uri": "",
+  "immediate_bps": 5000,
+  "challenge_window_ms": 120000,
+  "milestones": [
+    {"title": "Milestone 1 (заглушка)", "weight_bps": 4000, "deadline_days": 3},
+    {"title": "Milestone 2 (заглушка)", "weight_bps": 3000, "deadline_days": 5},
+    {"title": "Milestone 3 (заглушка)", "weight_bps": 3000, "deadline_days": 7}
+  ]
+}
