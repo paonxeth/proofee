@@ -1,431 +1,430 @@
-# Аудит контракта `contracts/goal`
+# Audit of the `contracts/goal` contract
 
-Дата: 10 ноября 2026 · коммит `55571d0` · проверено на соответствие `docs/SPEC.md` v1.0.
-Файлы: `src/lib.rs`, `src/math.rs`, `src/events.rs`. Код не менялся.
+Date: 10 November 2026 · commit `55571d0` · checked against `docs/SPEC.md` v1.0.
+Files: `src/lib.rs`, `src/math.rs`, `src/events.rs`. The code was not changed.
 
-## Как проверялось
+## How it was checked
 
-- Ручной разбор по чек-листу `near-contract-audit`: колбэки и `#[private]`, порядок
-  «состояние → перевод», права доступа, газ колбэка, storage, арифметика, JSON-типы.
-- `cargo test`: 66 юнит-тестов и 2 интеграционных, всё зелёное.
-- Отдельные замеры в песочнице (near-sandbox). Тест лежал в копии крейта во временной
-  папке, в репозиторий не попал:
-  - **A.** Состояние максимального размера: 5 этапов, все строки на пределе и из
-    4-байтных символов (`𝕏`), 5 пруфов, 5 оспариваний от постороннего. Потом `claim`.
-  - **B.** Цель задеплоена с балансом «storage + 5 байт», `immediate_bps = 10000`,
-    пришёл 1 NEAR, затем `claim`.
+- Manual review against the `near-contract-audit` checklist: callbacks and `#[private]`, the
+  "state → transfer" order, access control, callback gas, storage, arithmetic, JSON types.
+- `cargo test`: 66 unit tests and 2 integration tests, all green.
+- Separate measurements in the sandbox (near-sandbox). The test lived in a copy of the crate in a
+  temporary folder and did not get into the repository:
+  - **A.** Maximum-size state: 5 milestones, all strings at the limit and made of
+    4-byte characters (`𝕏`), 5 proofs, 5 challenges from a stranger. Then `claim`.
+  - **B.** A goal deployed with a balance of "storage + 5 bytes", `immediate_bps = 10000`,
+    1 NEAR received, then `claim`.
 
-| Замер | Результат |
+| Measurement | Result |
 | --- | --- |
-| wasm | 159 835 байт, около 1,6 NEAR под storage |
-| storage после `new` (максимальные строки) | 163 615 байт |
-| + 5 пруфов (только creator) | +5 520 байт |
-| + 5 оспариваний (любой аккаунт) | +5 720 байт (около 0,057 NEAR за счёт контракта) |
-| газ `on_claim_transfer` на максимальном состоянии | **3,0 TGas** из выделенных 10 |
-| `claim` с prepaid gas 15 TGas | проходит |
-| баланс контракта после 10+ вызовов без поступлений | не изменился, `unsynced = 0` (30% gas reward на контракт не приходят) |
-| замер B | `claim` падает с `LackBalanceForState` (не хватает 1,1·10²⁰ yocto = 11 байт), см. L-1 |
+| wasm | 159 835 bytes, about 1.6 NEAR for storage |
+| storage after `new` (maximum strings) | 163 615 bytes |
+| + 5 proofs (creator only) | +5 520 bytes |
+| + 5 challenges (any account) | +5 720 bytes (about 0.057 NEAR at the contract's expense) |
+| `on_claim_transfer` gas on the maximum state | **3.0 TGas** of the allotted 10 |
+| `claim` with 15 TGas prepaid gas | succeeds |
+| contract balance after 10+ calls with no income | unchanged, `unsynced = 0` (the 30% gas reward does not reach the contract) |
+| measurement B | `claim` fails with `LackBalanceForState` (1.1·10²⁰ yocto = 11 bytes short), see L-1 |
 
-## Итог
+## Summary
 
-Учёт денег работает правильно. Возврат неудачной выплаты не считается доходом при любом
-порядке квитанций. Повторного входа (reentrancy) нет. Колбэк защищён `#[private]`, газа
-ему хватает с запасом примерно в 3 раза. Переполнения исключены. **Находок уровня High
-нет.**
+The accounting is correct. The refund of a failed payout is not counted as income in any
+receipt order. There is no reentrancy. The callback is protected by `#[private]` and has about
+3× the gas it needs. Overflows are ruled out. **There are no High findings.**
 
-Главные риски — в правилах игры, а не в арифметике. Посторонний может бесплатно
-заморозить любой этап, если верификатор бездействует или удалён. Параметры `new` почти
-не ограничены сверху и снизу. Есть один реальный крайний случай со storage, при котором
-`claim` перестаёт работать навсегда.
+The main risks are in the rules of the game, not in the arithmetic. A stranger can freeze any
+milestone for free if the verifier is inactive or deleted. The `new` parameters are almost
+unbounded from above and below. There is one real storage edge case in which
+`claim` stops working forever.
 
 ---
 
-## Находки
+## Findings
 
-### M-1. Бесплатный спор без таймаута замораживает этапы · Medium · known (2)
+### M-1. A free challenge with no timeout freezes milestones · Medium · known (2)
 
-**Где:** `src/lib.rs:258` (`challenge`), `src/lib.rs:292` (`resolve`).
+**Where:** `src/lib.rs:258` (`challenge`), `src/lib.rs:292` (`resolve`).
 
-**Сценарий.** `challenge` может вызвать любой аккаунт, кроме creator. Залога нет, газ
-стоит около 0,0003 NEAR. Выйти из статуса Challenged можно только через `resolve`, а его
-вызывает только verifier.
-1. Злоумышленник оспаривает каждый поданный пруф. Это 5 транзакций на цель.
-2. Если верификатор не отвечает (потерял ключ, бросил проект, аккаунт удалён — см. L-5),
-   этапы навсегда остаются в Challenged. Их доля навсегда числится в `pending`: она не
-   становится ни `unlocked`, ни `forfeited`. Креатор не получает ничего, кроме `immediate`.
-3. Даже с живым верификатором любой может заставить его разбирать каждый этап вручную.
+**Scenario.** Any account except the creator can call `challenge`. There is no bond; gas
+costs about 0.0003 NEAR. The only way out of Challenged is `resolve`, and only the
+verifier can call it.
+1. An attacker challenges every submitted proof. That is 5 transactions per goal.
+2. If the verifier does not respond (lost the key, abandoned the project, account deleted, see L-5),
+   the milestones stay in Challenged forever. Their share stays in `pending` forever: it never
+   becomes `unlocked` or `forfeited`. The creator gets nothing but `immediate`.
+3. Even with an active verifier, anyone can force them to review every milestone by hand.
 
-**Исправление (дёшево, около 30 строк и 3 тестов).** Добавить в `Milestone` поле
-`challenged_at_ms: Option<u64>` и метод
-`resolve_timeout(index)`: его вызывает любой, если `now ≥ challenged_at_ms +
-RESOLVE_TIMEOUT_MS` (например, 7 дней, константа). Исход по умолчанию — **Accepted**:
-спор бесплатный, и если по умолчанию ставить Rejected, любой сможет сжечь долю
-креатора. Нужно править SPEC разделы 4, 6, 7 и записать решение в DECISIONS. Миграция
-не нужна: каждая цель деплоится заново.
+**Fix (cheap, about 30 lines and 3 tests).** Add a `challenged_at_ms: Option<u64>` field to
+`Milestone` and a method
+`resolve_timeout(index)`: anyone can call it if `now ≥ challenged_at_ms +
+RESOLVE_TIMEOUT_MS` (for example 7 days, a constant). The default outcome is **Accepted**:
+a challenge is free, and with Rejected as the default anyone could forfeit the creator's
+share. SPEC sections 4, 6, 7 need editing and the decision goes into DECISIONS. No migration
+is needed: every goal is deployed fresh.
 
-### M-2. Нет нижней границы окна оспаривания · Medium · known (4)
+### M-2. No lower bound on the challenge window · Medium · known (4)
 
-**Где:** `src/lib.rs:135`.
+**Where:** `src/lib.rs:135`.
 
-**Сценарий.** `new(..., challenge_window_ms: 1, ...)` проходит. `challenge` требует
-`now < submitted_at_ms + 1`, то есть выполнения в том же блоке, что и `submit_proof`. На
-практике это невозможно: чужая транзакция исполняется в следующем блоке, а пруф до
-публикации никто не видит. Уже в следующем блоке (около 1 с) любой вызывает `finalize`.
-В итоге креатор сам принимает все свои этапы, и верификатор не нужен. С окном в 1–5
-секунд картина почти та же.
+**Scenario.** `new(..., challenge_window_ms: 1, ...)` succeeds. `challenge` requires
+`now < submitted_at_ms + 1`, i.e. execution in the same block as `submit_proof`. In
+practice this is impossible: someone else's transaction executes in the next block, and nobody sees the proof before
+it is published. Already in the next block (about 1 s) anyone can call `finalize`.
+As a result the creator accepts all their own milestones, and the verifier is not needed. With a 1–5
+second window the picture is almost the same.
 
-**Ответ на вопрос «можно ли передать окно 1 мс»: да, проходит.**
+**Answer to the question "can a 1 ms window be passed": yes, it goes through.**
 
-**Исправление (1 строка и тест).** `const MIN_CHALLENGE_WINDOW_MS: u64 = 60_000;` и
+**Fix (1 line and a test).** `const MIN_CHALLENGE_WINDOW_MS: u64 = 60_000;` and
 `require!(challenge_window_ms >= MIN_CHALLENGE_WINDOW_MS, "Window too short")`.
-Демо-сценарий (120 000) и интеграционный тест (600 000) проходят. Верхнюю границу
-лучше добавить в той же правке (см. L-3).
+The demo scenario (120 000) and the integration test (600 000) pass. The upper bound
+is best added in the same change (see L-3).
 
-### M-3. Верификатор может сам оспорить и сам отклонить этап · Medium · known (1)
+### M-3. The verifier can challenge and reject a milestone themselves · Medium · known (1)
 
-**Где:** `src/lib.rs:261` (проверяется только `!= creator`), `src/lib.rs:292`.
+**Where:** `src/lib.rs:261` (only `!= creator` is checked), `src/lib.rs:292`.
 
-**Сценарий.** Verifier вызывает `challenge(i, "...")`, затем `resolve(i, false)`. Доля
-этапа сгорает и из прошлых, и из будущих фисов. Сигнала от третьей стороны для этого не
-нужно.
+**Scenario.** The verifier calls `challenge(i, "...")`, then `resolve(i, false)`. The milestone's
+share is forfeited from both past and future fees. No signal from a third party is
+needed.
 
-**Дешёвое исправление — частичное.** Добавить
-`require!(challenger != self.verifier, "Verifier cannot challenge")`. Это одна строка,
-но защищает слабо: верификатор оспорит с другого аккаунта. Польза в том, что в событиях
-`proof_challenged` не будет явного самодоговора. Настоящая защита — верификатор-мультисиг
-или DAO (SPEC 2) и залог за спор. Оба пункта вне MVP.
+**The cheap fix is partial.** Add
+`require!(challenger != self.verifier, "Verifier cannot challenge")`. It is one line,
+but it protects weakly: the verifier will challenge from another account. The benefit is that
+the `proof_challenged` events will not show obvious self-dealing. Real protection is a multisig
+or DAO verifier (SPEC 2) and a challenge bond. Both are outside the MVP.
 
-### L-1. `claim` не учитывает 16 байт `payout_in_flight`: выплата может сломаться навсегда · Low · подтверждено
+### L-1. `claim` does not account for the 16 bytes of `payout_in_flight`: payouts can break forever · Low · confirmed
 
-**Где:** `src/lib.rs:332-339` (резерв считается по `env::storage_usage()` до записи
-состояния), `src/lib.rs:351`.
+**Where:** `src/lib.rs:332-339` (the reserve is computed from `env::storage_usage()` before the state
+is written), `src/lib.rs:351`.
 
-**Сценарий.** `payout_in_flight: Option<NearToken>` в Borsh занимает 1 байт как `None`
-и 17 байт как `Some`. В `claim` резерв считается по текущему `storage_usage`. near-sdk
-записывает состояние только после тела метода, поэтому лишние 16 байт в резерв не
-попадают. Если `claimable ≥ free`, контракт отдаёт всё свободное. В конце квитанции
-рантайм видит нехватку 16 × 10¹⁹ yocto и откатывает `claim` целиком с
+**Scenario.** `payout_in_flight: Option<NearToken>` takes 1 byte in Borsh as `None`
+and 17 bytes as `Some`. In `claim` the reserve is computed from the current `storage_usage`. near-sdk
+writes the state only after the method body, so the extra 16 bytes are not included in the
+reserve. If `claimable ≥ free`, the contract pays out everything free. At the end of the receipt
+the runtime sees a shortfall of 16 × 10¹⁹ yocto and rolls back the whole `claim` with
 `LackBalanceForState`.
 
-Это подтверждено замером B. Хуже того, при `immediate_bps = 10000` (или когда все этапы
-приняты) разница `free − claimable` равна стартовому запасу и с новыми фисами не растёт:
-каждый новый доход увеличивает и баланс, и `claimable` на одну и ту же сумму. Поэтому
-`claim` не заработает уже никогда. Деньги не теряются, но креатор их не получит.
+Measurement B confirms this. Worse, with `immediate_bps = 10000` (or once all milestones
+are accepted) the difference `free − claimable` equals the initial margin and does not grow with new fees:
+every new income increases both the balance and `claimable` by the same amount. So
+`claim` will never work again. The money is not lost, but the creator will not receive it.
 
-Скрипт `scripts/deploy-testnet.sh` даёт 3 NEAR при storage около 1,6 NEAR, поэтому в
-демо это не воспроизводится. Проблема появится, если депозит при деплое уменьшат или
-если фронт будет деплоить цели сам.
+`scripts/deploy-testnet.sh` deposits 3 NEAR with storage around 1.6 NEAR, so this does not
+reproduce in the demo. The problem appears if the deploy deposit is reduced or
+if the frontend deploys goals itself.
 
-**Исправление (2 строки и тест).** Вычитать в `claim` постоянный запас:
-`const STORAGE_RESERVE_BYTES: u64 = 1_000;` и
-`storage_cost = (storage_usage + STORAGE_RESERVE_BYTES) × byte_cost`. Плюс L-2.
+**Fix (2 lines and a test).** Subtract a constant reserve in `claim`:
+`const STORAGE_RESERVE_BYTES: u64 = 1_000;` and
+`storage_cost = (storage_usage + STORAGE_RESERVE_BYTES) × byte_cost`. Plus L-2.
 
-### L-2. Storage растёт за счёт контракта, минимального запаса в `new` нет · Low
+### L-2. Storage grows at the contract's expense, no minimum reserve in `new` · Low
 
-**Где:** `src/lib.rs:267` (`reason`), `src/lib.rs:244` (`proof_uri`),
-`src/lib.rs:97` и `:130` (лимиты в символах), `src/lib.rs:119` (`new`).
+**Where:** `src/lib.rs:267` (`reason`), `src/lib.rs:244` (`proof_uri`),
+`src/lib.rs:97` and `:130` (limits in characters), `src/lib.rs:119` (`new`).
 
-**Сценарий.**
-- Любой аккаунт, кроме creator, может один раз на этап записать `challenger` (до
-  64 байт) и `reason` (280 символов, то есть до 1 120 байт в UTF-8). Замер: +5 720 байт
-  на 5 этапов, около 0,057 NEAR. Рост ограничен: каждый этап оспаривается только один
-  раз. Неограниченного раздувания нет.
-- Платит контракт. Если запас сверх storage меньше этой суммы, она съедает `pending` и
-  `claimable`: `claim` урезается по `free` (`src/lib.rs:339`), а в крайнем случае ломается
-  (L-1). Хуже того, если запаса нет совсем, сам `challenge` упадёт с
-  `LackBalanceForState`, и оспорить пруф станет невозможно.
-- Лимиты считаются в символах (`chars().count()`). Это соответствует SPEC, но в байтах
-  получается в 4 раза больше.
+**Scenario.**
+- Any account except the creator can write `challenger` (up to
+  64 bytes) and `reason` (280 characters, i.e. up to 1 120 bytes in UTF-8) once per milestone. Measured: +5 720 bytes
+  for 5 milestones, about 0.057 NEAR. Growth is bounded: each milestone can be challenged only
+  once. There is no unbounded bloat.
+- The contract pays. If the margin above storage is smaller than this amount, it eats into `pending` and
+  `claimable`: `claim` is capped by `free` (`src/lib.rs:339`), and in the extreme case it breaks
+  (L-1). Worse, if there is no margin at all, `challenge` itself fails with
+  `LackBalanceForState`, and challenging a proof becomes impossible.
+- Limits are counted in characters (`chars().count()`). This matches SPEC, but in bytes
+  it is up to 4 times more.
 
-**Исправление (2 строки и тест).** В конце `new` проверить
+**Fix (2 lines and a test).** At the end of `new` check
 `require!(env::account_balance() >= storage_cost(storage_usage + MAX_STATE_GROWTH_BYTES),
-"Deposit too small for storage")`, где `MAX_STATE_GROWTH_BYTES` ≈ 16 000. По замеру A
-полный рост — около 11 300 байт, плюс 16 байт из L-1. Вариант: проверять минимальный
-запас, например 0,2 NEAR сверх текущего storage. Лимиты в байтах (`len()` вместо
-`chars().count()`) — по желанию, это правка SPEC.
+"Deposit too small for storage")`, where `MAX_STATE_GROWTH_BYTES` ≈ 16 000. Per measurement A
+the full growth is about 11 300 bytes, plus 16 bytes from L-1. Alternative: check a minimum
+margin, for example 0.2 NEAR above the current storage. Limits in bytes (`len()` instead of
+`chars().count()`) are optional; that is a SPEC change.
 
-### L-3. Нет верхних границ у окна и дедлайнов: этап можно навсегда запереть · Low
+### L-3. No upper bounds on the window and deadlines: a milestone can be locked forever · Low
 
-**Где:** `src/lib.rs:109-114` (`window_end`), `src/lib.rs:135`, `src/lib.rs:146`.
+**Where:** `src/lib.rs:109-114` (`window_end`), `src/lib.rs:135`, `src/lib.rs:146`.
 
-**Сценарий.**
-- `challenge_window_ms = u64::MAX`. После `submit_proof` функция `window_end` падает с
-  `"Math overflow"`, поэтому и `challenge`, и `finalize` падают всегда. Этап навсегда
-  остаётся в Submitted (`expire` работает только из Pending), его доля навсегда в
-  `pending`. То же, по сути, происходит при окне в 100 лет.
-- `deadline_ms = u64::MAX`. Этап никогда не станет Failed. Креатор может не подавать
-  пруф, и доля не сгорит: обещание «провал сжигает фисы» теряет силу.
-- `deadline_ms = now + 1`. Этап проваливается сразу. Это не опасно, но бессмысленно.
+**Scenario.**
+- `challenge_window_ms = u64::MAX`. After `submit_proof`, `window_end` fails with
+  `"Math overflow"`, so both `challenge` and `finalize` always fail. The milestone stays
+  in Submitted forever (`expire` works only from Pending), its share is in
+  `pending` forever. A 100-year window is effectively the same.
+- `deadline_ms = u64::MAX`. The milestone never becomes Failed. The creator can skip the
+  proof and the share is never forfeited: the promise "failure forfeits fees" loses its force.
+- `deadline_ms = now + 1`. The milestone fails immediately. Not dangerous, but pointless.
 
-**Исправление (2 строки и тесты).** `MAX_CHALLENGE_WINDOW_MS = 30 дней`,
-`require!(m.deadline_ms <= now_ms + MAX_DEADLINE_MS)` с `MAX_DEADLINE_MS = 365 дней`.
+**Fix (2 lines and tests).** `MAX_CHALLENGE_WINDOW_MS = 30 days`,
+`require!(m.deadline_ms <= now_ms + MAX_DEADLINE_MS)` with `MAX_DEADLINE_MS = 365 days`.
 
-### L-4. `creator` или `verifier` может совпадать с адресом самого контракта · Low
+### L-4. `creator` or `verifier` can equal the contract's own address · Low
 
-**Где:** `src/lib.rs:128`.
+**Where:** `src/lib.rs:128`.
 
-**Сценарий.** У цели нет ключей, поэтому от имени контракта никто не подпишет вызов.
-- `verifier == current_account_id`: `resolve` вызвать некому. Любой посторонний
-  оспаривает пруф, и этап заморожен навсегда (как в M-1, только сразу).
-- `creator == current_account_id`: `claim` вызвать некому, все деньги заперты.
+**Scenario.** The goal has no keys, so nobody can sign a call on the contract's behalf.
+- `verifier == current_account_id`: nobody can call `resolve`. Any stranger
+  challenges a proof and the milestone is frozen forever (as in M-1, only immediately).
+- `creator == current_account_id`: nobody can call `claim`, all the money is locked.
 
-**Проверка `verifier == creator` есть** (тест `new_rejects_verifier_equal_to_creator`).
-Разные аккаунты одного человека или верификатор-субаккаунт креатора
-(`v.creator.testnet`) контракт отличить не может.
+**There is a `verifier == creator` check** (test `new_rejects_verifier_equal_to_creator`).
+Different accounts of the same person, or a verifier that is a subaccount of the creator
+(`v.creator.testnet`), cannot be told apart by the contract.
 
-**Исправление (2 строки и тест).** Добавить
+**Fix (2 lines and a test).** Add
 `require!(creator != env::current_account_id() && verifier != env::current_account_id(), "...")`.
 
-### L-5. Удалённый аккаунт верификатора или креатора · Low (ответ на вопрос)
+### L-5. Deleted verifier or creator account · Low (answer to a question)
 
-**Где:** `src/lib.rs:295`, `src/lib.rs:324`.
+**Where:** `src/lib.rs:295`, `src/lib.rs:324`.
 
-**Что происходит.**
-- **Удалён verifier.** `resolve` вызвать некому, все Challenged-этапы заморожены
-  навсегда (M-1). Пока аккаунт удалён, можно оспаривать новые пруфы, и их ждёт то же.
-- **Имя освобождается.** Аккаунт верхнего уровня (`proofee-verifier.testnet`, в mainnet
-  `*.near`) после удаления **может зарегистрировать любой** через регистратор. Новый
-  владелец становится верификатором со всеми правами. Субаккаунт (`v.team.testnet`)
-  может пересоздать только его родитель. Implicit-аккаунт пересоздаётся переводом, но
-  управляет им по-прежнему только владелец ключа.
-- **Удалён creator.** Перевод в `claim` падает. Колбэк откатывает счётчики, возврат
-  не считается доходом (это покрыто тестами). Но вызвать `claim` больше некому. Если
-  имя верхнего уровня займёт чужой человек, он заберёт всё доступное.
+**What happens.**
+- **The verifier is deleted.** Nobody can call `resolve`, all Challenged milestones are frozen
+  forever (M-1). While the account is deleted, new proofs can be challenged, and the same awaits them.
+- **The name is freed.** A top-level account (`proofee-verifier.testnet`, on mainnet
+  `*.near`) can be **registered by anyone** through the registrar after deletion. The new
+  owner becomes the verifier with all its rights. A subaccount (`v.team.testnet`)
+  can be recreated only by its parent. An implicit account is recreated by a transfer, but
+  is still controlled only by the key owner.
+- **The creator is deleted.** The transfer in `claim` fails. The callback rolls the counters back, the refund
+  is not counted as income (covered by tests). But nobody can call `claim` any more. If
+  someone else takes the top-level name, they take everything claimable.
 
-**Исправление.** Таймаут из M-1 закрывает случай с верификатором. Организационно:
-верификатор — субаккаунт командного аккаунта (`verifier.proofee.testnet`), а позже
-мультисиг или DAO. В `scripts/deploy-testnet.sh` сейчас стоит
-`proofee-verifier.testnet`, это аккаунт верхнего уровня.
+**Fix.** The timeout from M-1 covers the verifier case. Organizationally:
+the verifier is a subaccount of the team account (`verifier.proofee.testnet`), later a
+multisig or DAO. `scripts/deploy-testnet.sh` currently uses
+`proofee-verifier.testnet`, which is a top-level account.
 
-### L-6. Чувствительные методы вызываются ключом с ограниченным доступом · Low
+### L-6. Sensitive methods can be called with a limited access key · Low
 
-**Где:** `src/lib.rs:234` (`submit_proof`), `src/lib.rs:292` (`resolve`),
+**Where:** `src/lib.rs:234` (`submit_proof`), `src/lib.rs:292` (`resolve`),
 `src/lib.rs:322` (`claim`).
 
-**Сценарий.** Методы не требуют 1 yocto, поэтому их можно вызвать function-call
-ключом без подтверждения в кошельке. Если фронт при входе получит такой ключ на контракт
-цели и сохранит его в браузере, то XSS или утечка ключа верификатора позволит
-отклонять этапы (`resolve(i, false)`). Для `claim` вреда нет: деньги всё равно уходят
-креатору.
+**Scenario.** The methods do not require 1 yocto, so they can be called with a function-call
+key without wallet confirmation. If the frontend obtains such a key for the goal contract at sign-in
+and stores it in the browser, an XSS or a leak of the verifier's key would allow
+rejecting milestones (`resolve(i, false)`). For `claim` there is no harm: the money goes to the
+creator anyway.
 
-**Исправление.** `#[payable]` плюс `assert_one_yocto()` на `resolve` и, по желанию, на
-`submit_proof`. Это противоречит SPEC 7 («методы без `#[payable]`») и меняет UX: каждый
-вызов подтверждается в кошельке. **До 14 ноября не рекомендую.** Достаточно не просить
-у кошелька function-call ключ на контракт цели.
+**Fix.** `#[payable]` plus `assert_one_yocto()` on `resolve` and, optionally, on
+`submit_proof`. This contradicts SPEC 7 ("methods without `#[payable]`") and changes the UX: every
+call is confirmed in the wallet. **Not recommended before 14 November.** It is enough not to request
+a function-call key for the goal contract from the wallet.
 
-### I-1. Газ колбэка: 10 TGas хватает · Info
+### I-1. Callback gas: 10 TGas is enough · Info
 
-**Где:** `src/lib.rs:15`, `src/lib.rs:353-357`.
+**Where:** `src/lib.rs:15`, `src/lib.rs:353-357`.
 
-Замер A: на максимальном состоянии (около 11 КБ Borsh) `on_claim_transfer` сжигает
-3,0 TGas, запас примерно 3,3×. Неиспользованный газ `claim` распределяется на колбэк
-сверх статических 10 TGas: `claim` с prepaid gas 15 TGas прошёл. Если бы `claim`
-получил газа меньше, чем нужно на создание колбэка, транзакция упала бы целиком и
-состояние откатилось. Застрявшего флага при этом не будет. Колбэк сам упасть не может:
-`checked_sub`/`checked_add` защищены инвариантом (`claimed ≥ amount`, потому что
-`amount` только что прибавлен), а `promise_result_checked(0, 0)` для перевода получает
-пустой результат.
+Measurement A: on the maximum state (about 11 KB of Borsh) `on_claim_transfer` burns
+3.0 TGas, a margin of about 3.3×. Unused `claim` gas is distributed to the callback
+on top of the static 10 TGas: `claim` with 15 TGas prepaid gas succeeded. If `claim`
+had less gas than needed to create the callback, the whole transaction would fail and
+the state would roll back. No stuck flag would result. The callback itself cannot fail:
+`checked_sub`/`checked_add` are protected by an invariant (`claimed ≥ amount`, because
+`amount` was just added), and `promise_result_checked(0, 0)` gets an empty result
+for a transfer.
 
-### I-2. Учёт поступлений при асинхронной выплате корректен · Info
+### I-2. Income accounting during an asynchronous payout is correct · Info
 
-**Где:** `src/lib.rs:212-231`, `:343-351`, `:363-384`.
+**Where:** `src/lib.rs:212-231`, `:343-351`, `:363-384`.
 
-Разобраны все порядки «выплата → возврат → колбэк → новый доход»:
-- возврат до колбэка: `sync` пропущен, колбэк возвращает `last_balance` на место;
-- возврат после колбэка: баланс временно ниже `last_balance`, `sync` его не опускает;
-- доход X пришёл между колбэком с откатом и возвратом: `sync` временно учтёт
-  `max(0, X − amount)`, остаток учтётся, когда придёт возврат. Временный недоучёт, а
-  не двойной счёт. Итог всегда сходится, это покрыто тестами
-  `income_during_failed_payout_counted_once` и соседними.
+All orderings of "payout → refund → callback → new income" were analyzed:
+- refund before the callback: `sync` is skipped, the callback puts `last_balance` back;
+- refund after the callback: the balance is temporarily below `last_balance`, `sync` does not lower it;
+- income X arrives between a rollback callback and the refund: `sync` temporarily counts
+  `max(0, X − amount)`, the rest is counted when the refund arrives. A temporary undercount,
+  not a double count. The total always converges; covered by
+  `income_during_failed_payout_counted_once` and neighboring tests.
 
-Мелочь: пока выплата в пути, `get_balances().unsynced` показывает пришедший возврат как
-«неучтённый доход». Фронту стоит не показывать `unsynced` при активной выплате.
-`deposit()` в это время тоже молча ничего не учитывает (`sync` пропущен), деньги
-учтутся позже.
+Minor: while a payout is in flight, `get_balances().unsynced` shows an arrived refund as
+"uncounted income". The frontend should not show `unsynced` during an active payout.
+`deposit()` also silently counts nothing at that time (`sync` is skipped); the money
+is counted later.
 
-### I-3. Колбэк доверяет аргументу `amount` · Info
+### I-3. The callback trusts the `amount` argument · Info
 
-**Где:** `src/lib.rs:364`.
+**Where:** `src/lib.rs:364`.
 
-Сумма отката берётся из аргумента, а не из `payout_in_flight`. Это безопасно:
-`#[private]` (подтверждено интеграционным тестом `on_claim_transfer_is_private`), ключей
-у цели нет, ложный вызов без promise result упадёт сам. Для единообразия можно брать
-`self.payout_in_flight.take().unwrap_or(amount)`: такая версия не падает и не нарушает
-SPEC 5.3 п. 7. Необязательно.
+The rollback amount comes from the argument, not from `payout_in_flight`. This is safe:
+`#[private]` (confirmed by the integration test `on_claim_transfer_is_private`), the goal
+has no keys, and a fake call without a promise result fails by itself. For consistency one could use
+`self.payout_in_flight.take().unwrap_or(amount)`: that version does not fail and does not violate
+SPEC 5.3 step 7. Optional.
 
-### I-4. `new` без `#[private]`; шаблонные workflow с `without-init-call` · Info
+### I-4. `new` without `#[private]`; template workflows with `without-init-call` · Info
 
-**Где:** `src/lib.rs:118`, `contracts/goal/.github/workflows/deploy-*.yml`.
+**Where:** `src/lib.rs:118`, `contracts/goal/.github/workflows/deploy-*.yml`.
 
-`#[init]` не даёт вызвать `new` второй раз. Первый вызов открыт всем, но
-`scripts/deploy-testnet.sh` делает create, deploy и `new` одной транзакцией, поэтому
-окна для перехвата нет. `#[private]` здесь сломал бы деплой: predecessor — MASTER.
-Однако в `contracts/goal/.github/workflows/` остались шаблоны cargo-near:
-`deploy-production.yml` запускается на push в `main` и делает
-`cargo near deploy ... without-init-call`. Из подпапки GitHub их не запускает, но если их
-перенести в корень, контракт окажется без `new`, и его сможет инициализировать первый
-встречный со своим `creator`. Кроме того, в них есть «production», что спорит с
-правилом «только testnet». Рекомендую удалить.
+`#[init]` prevents calling `new` a second time. The first call is open to everyone, but
+`scripts/deploy-testnet.sh` does create, deploy and `new` in one transaction, so
+there is no window to front-run it. `#[private]` would break the deploy here: the predecessor is MASTER.
+However, cargo-near templates remain in `contracts/goal/.github/workflows/`:
+`deploy-production.yml` runs on push to `main` and does
+`cargo near deploy ... without-init-call`. GitHub does not run them from a subfolder, but if they
+are moved to the root, the contract ends up without `new`, and the first comer can initialize it
+with their own `creator`. Besides, they mention "production", which conflicts with the
+"testnet only" rule. Recommend deleting them.
 
-### I-5. Фисы токенами (NEP-141) · Info · known (3)
+### I-5. Fees in tokens (NEP-141) · Info · known (3)
 
-**Где:** весь контракт; SPEC 2, 12.
+**Where:** the whole contract; SPEC 2, 12.
 
-`ft_transfer` мемкоина или wNEAR на цель — это **безвозвратная потеря**: ключей нет,
-метода вывода нет. `ft_transfer_call` упадёт (нет `ft_on_transfer`), и токены вернутся.
-Дешёвого исправления внутри MVP нет. Минимальный безопасный шаг —
-`ft_on_transfer`, который возвращает всю сумму (`PromiseOrValue::Value(amount)`), но
-от обычного `ft_transfer` он не спасает. Для testnet достаточно написать об этом в
-README и на фронте. До mainnet нужны `sync_ft` и выплата токенов (SPEC 12).
+`ft_transfer` of the memecoin or wNEAR to a goal is an **irreversible loss**: there are no keys and
+no withdrawal method. `ft_transfer_call` fails (there is no `ft_on_transfer`), and the tokens are returned.
+There is no cheap fix within the MVP. The minimal safe step is
+an `ft_on_transfer` that returns the whole amount (`PromiseOrValue::Value(amount)`), but
+it does not help against a plain `ft_transfer`. For testnet it is enough to state this in the
+README and in the frontend. Before mainnet, `sync_ft` and token payouts are needed (SPEC 12).
 
-### I-6. Арифметика и округления · Info (проблем нет)
+### I-6. Arithmetic and rounding · Info (no issues)
 
-**Где:** `src/math.rs:22-61`, `src/lib.rs:447-463`.
+**Where:** `src/math.rs:22-61`, `src/lib.rs:447-463`.
 
-- `R × 10000` переполнит u128 только при R > 3,4·10³⁴ yocto, а это в 28 раз больше
-  всей эмиссии NEAR. Плюс `checked_mul` и `overflow-checks = true` в release.
-- `W_acc + W_lost ≤ 10000`, поэтому `U + F ≤ L` и `pending` не уходит в минус.
-- `I + U` только растёт (R и W_acc не убывают), а `claimed` растёт не больше чем на
-  `claimable`, поэтому `claimed ≤ I + U` всегда.
-- Остаток от округления (до 3 yocto на вызов) остаётся в контракте. Контракт не платит
-  больше, чем получил, как и требует SPEC 9.
-- `float` нет. `u64` в JSON (`deadline_ms`, окно) — числа в мс, до 2⁵³ JS их не
-  искажает.
+- `R × 10000` overflows u128 only for R > 3.4·10³⁴ yocto, which is 28 times more than
+  the entire NEAR supply. Plus `checked_mul` and `overflow-checks = true` in release.
+- `W_acc + W_lost ≤ 10000`, so `U + F ≤ L` and `pending` never goes negative.
+- `I + U` only grows (R and W_acc never decrease), and `claimed` grows by at most
+  `claimable`, so `claimed ≤ I + U` always.
+- The rounding remainder (up to 3 yocto per call) stays in the contract. The contract never pays
+  out more than it received, as SPEC 9 requires.
+- No `float`. `u64` values in JSON (`deadline_ms`, window) are milliseconds; below 2⁵³ JS does not
+  distort them.
 
-### I-7. Границы времени согласованы · Info (проблем нет)
+### I-7. Time boundaries are consistent · Info (no issues)
 
 `submit_proof`: `now < deadline`, `expire`: `now ≥ deadline`. `challenge`: `now < end`,
-`finalize`: `now ≥ end`. Пересечений и «дыр» нет, есть тесты на точные границы.
-Практический момент: транзакция исполняется через 1–2 блока после отправки, поэтому
-оспаривание, отправленное за секунду до конца окна, может получить `"Window closed"`.
-Фронту стоит предупреждать, когда до конца окна осталось меньше 10 с.
+`finalize`: `now ≥ end`. No overlaps and no gaps; there are tests on the exact boundaries.
+Practical note: a transaction executes 1–2 blocks after it is sent, so
+a challenge sent a second before the window ends may get `"Window closed"`.
+The frontend should warn when less than 10 s of the window is left.
 
-### I-8. Мелочи · Info
+### I-8. Minor items · Info
 
-- Пустые `proof_uri` и `reason` допустимы. Это не противоречит SPEC, но пустой пруф
-  выглядит странно (`src/lib.rs:244`, `:267`).
-- `set_token` не проверяет адрес и ставится один раз. Ошибку креатора не исправить
-  (`src/lib.rs:194`). Поле информационное, вреда нет.
-- `Cargo.toml`: `repository = "https://github.com/<xxx>/<xxx>"` и шаблонный
-  `description` попадают в NEP-330 метаданные контракта.
+- Empty `proof_uri` and `reason` are allowed. This does not contradict SPEC, but an empty proof
+  looks odd (`src/lib.rs:244`, `:267`).
+- `set_token` does not validate the address and is set once. A creator mistake cannot be fixed
+  (`src/lib.rs:194`). The field is informational, no harm.
+- `Cargo.toml`: `repository = "https://github.com/<xxx>/<xxx>"` and the template
+  `description` end up in the contract's NEP-330 metadata.
 
 ---
 
-## Права доступа по методам
+## Access control by method
 
-| Метод | Кто может | Проверка | Замечания |
+| Method | Who can call | Check | Notes |
 | --- | --- | --- | --- |
-| `new` | любой, один раз (`#[init]`) | состояния ещё нет | атомарный деплой (I-4); границы параметров — M-2, L-3, L-4 |
-| `set_token` | creator, один раз | `:196`, `:199` | — |
-| `deposit` | любой, `#[payable]` | — | — |
-| `sync` | любой | — | при выплате в пути ничего не делает |
+| `new` | anyone, once (`#[init]`) | no state yet | atomic deploy (I-4); parameter bounds: M-2, L-3, L-4 |
+| `set_token` | creator, once | `:196`, `:199` | — |
+| `deposit` | anyone, `#[payable]` | — | — |
+| `sync` | anyone | — | does nothing while a payout is in flight |
 | `submit_proof` | creator | `:237` | L-6 |
-| `challenge` | любой, кроме creator | `:261` | M-1, M-3 |
-| `finalize` | любой | время | — |
+| `challenge` | anyone except creator | `:261` | M-1, M-3 |
+| `finalize` | anyone | time | — |
 | `resolve` | verifier | `:295` | L-5, L-6 |
-| `expire` | любой | время | — |
-| `claim` | creator | `:324` | деньги только creator |
-| `on_claim_transfer` | только сам контракт (`#[private]`) | подтверждено интеграционным тестом | I-3 |
+| `expire` | anyone | time | — |
+| `claim` | creator | `:324` | money goes to the creator only |
+| `on_claim_transfer` | the contract itself only (`#[private]`) | confirmed by an integration test | I-3 |
 | `get_goal`, `get_balances` | view | — | — |
 
-Админ-методов и методов смены параметров нет, это соответствует SPEC 7.
+There are no admin methods and no parameter-changing methods, as SPEC 7 requires.
 
-## Соответствие SPEC
+## Compliance with SPEC
 
-Расхождений с SPEC в поведении нет: формулы 5.2, порядок шагов 5.3, переходы раздела
-6, события раздела 8 и проверки `new` из раздела 3 реализованы как написано. Тексты
-дополнительных ошибок (`"Creator and verifier must differ"`, `"Need 1-5 milestones"`,
-`"Token already set"`, `"Math overflow"` и другие) в SPEC 7 не перечислены. Это не
-нарушение, но их стоит дописать в список.
+There are no behavioral deviations from SPEC: the 5.2 formulas, the 5.3 step order, the section 6
+transitions, the section 8 events and the section 3 `new` checks are implemented as written. The texts of
+the additional errors (`"Creator and verifier must differ"`, `"Need 1-5 milestones"`,
+`"Token already set"`, `"Math overflow"` and others) are not listed in SPEC 7. This is not a
+violation, but they should be added to the list.
 
-Все находки выше — пробелы самой SPEC (каких проверок она не требует), а не отклонения
-кода от неё. Поэтому каждое исправление начинается с правки SPEC.
+All findings above are gaps in the SPEC itself (checks it does not require), not deviations
+of the code from it. So every fix starts with a SPEC edit.
 
-## Сводная таблица
+## Summary table
 
-| ID | Severity | Место | Суть | Known | Исправление | Цена |
+| ID | Severity | Location | Issue | Known | Fix | Cost |
 | --- | --- | --- | --- | --- | --- | --- |
-| M-1 | Medium | lib.rs:258, :292 | бесплатный спор без таймаута замораживает этапы | 2 | `resolve_timeout` → Accepted | ~30 строк |
-| M-2 | Medium | lib.rs:135 | окно 1 мс отключает оспаривание | 4 | `MIN_CHALLENGE_WINDOW_MS` | 1 строка |
-| M-3 | Medium | lib.rs:261 | верификатор сам оспаривает и отклоняет | 1 | `challenger != verifier` (частично) | 1 строка |
-| L-1 | Low | lib.rs:332-351 | +16 байт `payout_in_flight` → `claim` ломается навсегда | — | запас байтов в резерве | 2 строки |
-| L-2 | Low | lib.rs:119, :267 | storage растёт за счёт контракта, нет минимального депозита | — | проверка баланса в `new` | 2 строки |
-| L-3 | Low | lib.rs:109, :135, :146 | `u64::MAX` в окне или дедлайне запирает этап | — | верхние границы | 2 строки |
-| L-4 | Low | lib.rs:128 | creator/verifier = адрес контракта | — | 2 `require!` | 2 строки |
-| L-5 | Low | lib.rs:295, :324 | удалённый аккаунт; имя верхнего уровня может занять чужой | — | M-1 + верификатор-субаккаунт | организационно |
-| L-6 | Low | lib.rs:234, :292 | нет `assert_one_yocto` | — | после хакатона | — |
-| I-1 | Info | lib.rs:15 | колбэк: 3,0 из 10 TGas | — | не нужно | — |
-| I-2 | Info | lib.rs:212-384 | учёт при выплате и возврате корректен; `unsynced` в пути | — | фронт | — |
-| I-3 | Info | lib.rs:364 | колбэк берёт `amount` из аргумента | — | по желанию | 1 строка |
-| I-4 | Info | lib.rs:118, workflows | шаблонные `deploy-*.yml` с `without-init-call` | — | удалить файлы | — |
-| I-5 | Info | — | токены по `ft_transfer` теряются | 3 | README и фронт; `sync_ft` до mainnet | — |
-| I-6 | Info | math.rs | арифметика в порядке | — | — | — |
-| I-7 | Info | lib.rs | границы времени в порядке | — | предупреждение на фронте | — |
-| I-8 | Info | lib.rs, Cargo.toml | мелочи | — | по желанию | — |
+| M-1 | Medium | lib.rs:258, :292 | a free challenge with no timeout freezes milestones | 2 | `resolve_timeout` → Accepted | ~30 lines |
+| M-2 | Medium | lib.rs:135 | a 1 ms window disables challenges | 4 | `MIN_CHALLENGE_WINDOW_MS` | 1 line |
+| M-3 | Medium | lib.rs:261 | the verifier challenges and rejects by themselves | 1 | `challenger != verifier` (partial) | 1 line |
+| L-1 | Low | lib.rs:332-351 | +16 bytes of `payout_in_flight` → `claim` breaks forever | — | reserve bytes in the cap | 2 lines |
+| L-2 | Low | lib.rs:119, :267 | storage grows at the contract's expense, no minimum deposit | — | balance check in `new` | 2 lines |
+| L-3 | Low | lib.rs:109, :135, :146 | `u64::MAX` window or deadline locks a milestone | — | upper bounds | 2 lines |
+| L-4 | Low | lib.rs:128 | creator/verifier = the contract address | — | 2 `require!` | 2 lines |
+| L-5 | Low | lib.rs:295, :324 | deleted account; someone else can take a top-level name | — | M-1 + verifier subaccount | organizational |
+| L-6 | Low | lib.rs:234, :292 | no `assert_one_yocto` | — | after the hackathon | — |
+| I-1 | Info | lib.rs:15 | callback: 3.0 of 10 TGas | — | not needed | — |
+| I-2 | Info | lib.rs:212-384 | accounting during payout and refund is correct; `unsynced` in flight | — | frontend | — |
+| I-3 | Info | lib.rs:364 | the callback takes `amount` from the argument | — | optional | 1 line |
+| I-4 | Info | lib.rs:118, workflows | template `deploy-*.yml` with `without-init-call` | — | delete the files | — |
+| I-5 | Info | — | tokens sent via `ft_transfer` are lost | 3 | README and frontend; `sync_ft` before mainnet | — |
+| I-6 | Info | math.rs | arithmetic is fine | — | — | — |
+| I-7 | Info | lib.rs | time boundaries are fine | — | warning in the frontend | — |
+| I-8 | Info | lib.rs, Cargo.toml | minor items | — | optional | — |
 
-## Что исправить до 14 ноября
+## What to fix before 14 November
 
-Каждый пункт — отдельный шаг: правка SPEC, затем код, затем тест, затем `cargo test`.
+Each item is a separate step: SPEC edit, then code, then test, then `cargo test`.
 
-1. **Ограничения параметров в `new`** (M-2, L-3, L-4). Это одна правка SPEC раздела 3 и
-   около 6 `require!`: окно от 60 с до 30 дней, дедлайн не дальше 365 дней, creator и
-   verifier не равны адресу контракта. Ничего не ломает в демо, и это самое дешёвое
-   закрытие известного ограничения 4.
-2. **Запас под storage** (L-1, L-2): постоянный запас в `claim` и проверка минимального
-   баланса в конце `new`. Две строки, но они убирают единственный найденный сценарий,
-   при котором деньги креатора навсегда недоступны.
-3. **Таймаут спора** (M-1) — если на него есть полдня. Это самая полезная правка по
-   существу: она закрывает известное ограничение 2 и случай с удалённым верификатором
-   (L-5). Сначала нужно решение команды об исходе по умолчанию (рекомендую Accepted) и
-   запись в DECISIONS.
-4. **Без кода:** удалить `contracts/goal/.github/workflows/deploy-*.yml` (I-4). В
-   `deploy-testnet.sh` взять верификатора-субаккаунт (L-5). В README написать, что
-   токены на цель отправлять нельзя (I-5).
+1. **Parameter bounds in `new`** (M-2, L-3, L-4). One edit to SPEC section 3 and
+   about 6 `require!`s: window from 60 s to 30 days, deadline at most 365 days ahead, creator and
+   verifier differ from the contract address. Breaks nothing in the demo, and it is the cheapest
+   way to close known limitation 4.
+2. **Storage reserve** (L-1, L-2): a constant reserve in `claim` and a minimum
+   balance check at the end of `new`. Two lines, but they remove the only scenario found
+   in which the creator's money becomes permanently unavailable.
+3. **Dispute timeout** (M-1), if there is half a day for it. This is the most useful change in
+   substance: it closes known limitation 2 and the deleted-verifier case
+   (L-5). It first needs a team decision on the default outcome (Accepted recommended) and
+   an entry in DECISIONS.
+4. **No code:** delete `contracts/goal/.github/workflows/deploy-*.yml` (I-4). In
+   `deploy-testnet.sh` use a verifier subaccount (L-5). State in the README that
+   tokens must not be sent to a goal (I-5).
 
-**Не трогать до дедлайна:** `assert_one_yocto` (L-6, меняет UX и SPEC), приём токенов
-(I-5), `challenger != verifier` (M-3: защищает слабо; можно добавить, если пункты 1–2
-уже готовы, но правильное решение — мультисиг или DAO).
+**Do not touch before the deadline:** `assert_one_yocto` (L-6, changes UX and SPEC), accepting tokens
+(I-5), `challenger != verifier` (M-3: weak protection; can be added if items 1–2
+are already done, but the right solution is a multisig or DAO).
 
 ---
 
-## Статус исправлений
+## Fix status
 
-Обновлено 10 ноября 2026. Каждое исправление шло в порядке: SPEC → код → тест →
-`cargo test`. После последнего коммита: 79 юнит-тестов и 3 интеграционных, всё зелёное.
-В testnet ничего не деплоилось.
+Updated 10 November 2026. Every fix followed the order SPEC → code → test →
+`cargo test`. After the last commit: 79 unit tests and 3 integration tests, all green.
+Nothing was deployed to testnet.
 
-### Исправлено
+### Fixed
 
-| ID | Коммит | Что сделано | Тесты |
+| ID | Commit | What was done | Tests |
 | --- | --- | --- | --- |
-| M-2 | `b38aaf2` | окно спора от 60 000 до 2 592 000 000 мс (1 мин – 30 дней) | `new_rejects_window_below_minute`, `new_rejects_zero_window` |
-| L-3 | `b38aaf2` | окно ≤ 30 дней, дедлайн ≤ now + 365 дней | `new_rejects_window_above_30_days`, `new_rejects_deadline_beyond_year`, `new_accepts_upper_limits` |
-| L-4 | `b38aaf2` | creator и verifier ≠ адрес контракта | `new_rejects_creator_equal_to_contract`, `new_rejects_verifier_equal_to_contract` |
-| — | `b38aaf2` | все тексты ошибок `new` и служебные дописаны в SPEC 7 | — |
-| L-1 | `6b2f445` | `claim` не выплачивает стоимость `storage_usage + 16 000` байт | `claim_keeps_storage_reserve` (без запаса выплата была бы 4,16 NEAR вместо 4) |
-| L-2 | `6b2f445` | в конце `new` баланс ≥ стоимость `storage_usage + 2 × 16 000` байт (≈ 0,32 NEAR сверх кода) | `new_rejects_deposit_below_storage_reserve`, `new_accepts_exact_storage_reserve`; интеграционный `new_requires_storage_deposit`: 3 NEAR, как в `deploy-testnet.sh`, проходят даже со строками максимальной длины, 1,9 NEAR отклоняются |
-| M-1 | `3979e55` | `challenged_at_ms`; `resolve_timeout` (любой, через 24 ч после спора → Accepted); после 24 ч `resolve` закрыт | `resolve_works_until_timeout`, `resolve_rejects_after_timeout`, `resolve_timeout_rejects_before_timeout`, `resolve_timeout_accepts_for_creator`, `resolve_timeout_requires_challenge` |
-| L-5 (верификатор) | `3979e55`, `cc32d3a` | удалённый верификатор больше не замораживает этапы (таймаут); в `deploy-testnet.sh` верификатор по умолчанию — `verifier.$MASTER` | — |
-| I-4 | `cc32d3a` | удалены `contracts/goal/.github` (шаблонный CI с `without-init-call`) и шаблонный `README.md` | — |
-| I-8 (Cargo.toml) | `cc32d3a` | заполнены `description` и `repository` для NEP-330 | — |
+| M-2 | `b38aaf2` | challenge window from 60 000 to 2 592 000 000 ms (1 min – 30 days) | `new_rejects_window_below_minute`, `new_rejects_zero_window` |
+| L-3 | `b38aaf2` | window ≤ 30 days, deadline ≤ now + 365 days | `new_rejects_window_above_30_days`, `new_rejects_deadline_beyond_year`, `new_accepts_upper_limits` |
+| L-4 | `b38aaf2` | creator and verifier ≠ the contract address | `new_rejects_creator_equal_to_contract`, `new_rejects_verifier_equal_to_contract` |
+| — | `b38aaf2` | all `new` and internal error texts added to SPEC 7 | — |
+| L-1 | `6b2f445` | `claim` never pays out the cost of `storage_usage + 16 000` bytes | `claim_keeps_storage_reserve` (without the reserve the payout would be 4.16 NEAR instead of 4) |
+| L-2 | `6b2f445` | at the end of `new` the balance ≥ the cost of `storage_usage + 2 × 16 000` bytes (≈ 0.32 NEAR on top of the code) | `new_rejects_deposit_below_storage_reserve`, `new_accepts_exact_storage_reserve`; integration `new_requires_storage_deposit`: 3 NEAR, as in `deploy-testnet.sh`, pass even with maximum-length strings, 1.9 NEAR is rejected |
+| M-1 | `3979e55` | `challenged_at_ms`; `resolve_timeout` (anyone, 24 h after the challenge → Accepted); after 24 h `resolve` is closed | `resolve_works_until_timeout`, `resolve_rejects_after_timeout`, `resolve_timeout_rejects_before_timeout`, `resolve_timeout_accepts_for_creator`, `resolve_timeout_requires_challenge` |
+| L-5 (verifier) | `3979e55`, `cc32d3a` | a deleted verifier no longer freezes milestones (timeout); in `deploy-testnet.sh` the default verifier is `verifier.$MASTER` | — |
+| I-4 | `cc32d3a` | deleted `contracts/goal/.github` (template CI with `without-init-call`) and the template `README.md` | — |
+| I-8 (Cargo.toml) | `cc32d3a` | filled in `description` and `repository` for NEP-330 | — |
 
-### Оставлено
+### Left as is
 
-| ID | Почему |
+| ID | Why |
 | --- | --- |
-| M-3 | Проверка `challenger != verifier` обходится вторым аккаунтом. Настоящее решение — верификатор-мультисиг или DAO и залог за спор, это вне MVP. Таймаут из M-1 тут не помогает: верификатор отклоняет в пределах 24 ч. |
-| L-5 (креатор) | Если креатор удалит аккаунт верхнего уровня, имя может занять чужой человек и забрать доступное. Это решается организационно: не удалять аккаунт креатора. |
-| L-5 (демо) | В `deploy-testnet.sh` creator = `MASTER`, а верификатор — его субаккаунт. В демо команда и креатор — один человек, это нормально. Для настоящих целей верификатор не должен принадлежать креатору. |
-| L-6 | `assert_one_yocto` меняет SPEC 7 и UX (каждый `resolve` подтверждается в кошельке). Отложено до после хакатона; пока фронт не должен запрашивать function-call ключ на контракт цели. |
-| I-2 | Нужна правка во фронте: не показывать `unsynced`, пока выплата в пути. |
-| I-3 | Безопасно как есть, правка необязательная. |
-| I-5 | Токены вне MVP. README удалён в `cc32d3a`, поэтому предупреждение «не отправлять токены на цель» должно быть во фронте. До mainnet нужны `sync_ft` и выплата токенов. |
-| I-7 | Предупреждение о конце окна спора — задача фронта. |
-| I-8 (остальное) | Пустые `proof_uri`/`reason` и непроверяемый `set_token` вреда не несут. |
+| M-3 | A `challenger != verifier` check is bypassed with a second account. The real solution is a multisig or DAO verifier and a challenge bond, which is outside the MVP. The M-1 timeout does not help here: the verifier rejects within 24 h. |
+| L-5 (creator) | If the creator deletes their top-level account, someone else can take the name and claim the claimable amount. This is solved organizationally: do not delete the creator account. |
+| L-5 (demo) | In `deploy-testnet.sh` creator = `MASTER`, and the verifier is its subaccount. In the demo the team and the creator are the same person, which is fine. For real goals the verifier must not belong to the creator. |
+| L-6 | `assert_one_yocto` changes SPEC 7 and the UX (every `resolve` is confirmed in the wallet). Postponed until after the hackathon; until then the frontend must not request a function-call key for the goal contract. |
+| I-2 | Needs a frontend change: do not show `unsynced` while a payout is in flight. |
+| I-3 | Safe as is; the change is optional. |
+| I-5 | Tokens are outside the MVP. The warning "do not send tokens to a goal" is in the root README (`31db38f`) and must also be shown in the frontend. Before mainnet, `sync_ft` and token payouts are needed. |
+| I-7 | Warning about the end of the challenge window is a frontend task. |
+| I-8 (rest) | Empty `proof_uri`/`reason` and the unvalidated `set_token` do no harm. |
 
-### Что изменилось для фронта и демо
+### What changed for the frontend and the demo
 
-- Новый метод `resolve_timeout(index)` и поле `challenged_at_ms` в `get_goal().milestones`.
-- Демо-сценарий SPEC 11 не меняется: окно 120 000 мс в допустимых пределах, а
-  `resolve` в шаге 5 делается сразу, задолго до 24 ч.
-- Перед запуском `deploy-testnet.sh` нужно создать `verifier.proofee-anton.testnet`.
+- New method `resolve_timeout(index)` and field `challenged_at_ms` in `get_goal().milestones`.
+- The SPEC 11 demo scenario does not change: the 120 000 ms window is within bounds, and
+  `resolve` in step 5 is called right away, long before 24 h.
+- Before running `deploy-testnet.sh`, create `verifier.proofee-anton.testnet`.

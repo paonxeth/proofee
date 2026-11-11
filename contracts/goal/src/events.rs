@@ -1,4 +1,4 @@
-// События NEP-297 (SPEC 8).
+// NEP-297 events (SPEC 8).
 use near_sdk::env;
 use near_sdk::serde_json::{Value, json};
 

@@ -1,5 +1,5 @@
-// Формулы учёта денег (SPEC 5.2). Чистые функции: на входе и выходе — yoctoNEAR в u128,
-// никакого состояния контракта. Деление округляет вниз, остальное — checked-арифметика.
+// Accounting formulas (SPEC 5.2). Pure functions: yoctoNEAR as u128 in and out,
+// no contract state. Division rounds down, everything else is checked arithmetic.
 use near_sdk::env;
 
 pub const BPS_DENOMINATOR: u16 = 10_000;
@@ -18,7 +18,7 @@ pub fn overflow() -> ! {
     env::panic_str("Math overflow")
 }
 
-/// `amount * bps / 10000`, с округлением вниз.
+/// `amount * bps / 10000`, rounded down.
 pub fn bps_share(amount: u128, bps: u32) -> u128 {
     amount
         .checked_mul(u128::from(bps))
@@ -26,8 +26,8 @@ pub fn bps_share(amount: u128, bps: u32) -> u128 {
         / u128::from(BPS_DENOMINATOR)
 }
 
-/// Раскладка дохода `total_received` по SPEC 5.2.
-/// `w_acc` — сумма весов Accepted, `w_lost` — Rejected и Failed.
+/// Breakdown of `total_received` per SPEC 5.2.
+/// `w_acc` is the total weight of Accepted, `w_lost` of Rejected and Failed.
 pub fn compute(
     total_received: u128,
     immediate_bps: u16,
@@ -66,10 +66,10 @@ mod tests {
 
     const NEAR: u128 = 1_000_000_000_000_000_000_000_000;
 
-    // SPEC 10, тест 4: пример из 5.2.
+    // SPEC 10, test 4: the example from 5.2.
     #[test]
     fn spec_example_100_near() {
-        // Этапы 40/30/30: первый принят, второй отклонён, третий ждёт. Забрано 30.
+        // Milestones 40/30/30: first accepted, second rejected, third pending. 30 claimed.
         let b = compute(100 * NEAR, 5000, 4000, 3000, 30 * NEAR);
         assert_eq!(
             b,

@@ -1,34 +1,35 @@
 # ProoFee
 
-Мемкоин-цели: фисы токена идут в контракт цели, креатор получает их по мере принятых этапов.
-Хакатон NEAR, трек 11. Дедлайн: 14 ноября, 23:59 UTC. Демо — только testnet.
+Memecoin goals: token fees go to a goal contract, and the creator receives them as milestones are accepted.
+NEAR hackathon, track 11. Deadline: 14 November, 23:59 UTC. Demo: testnet only.
 
-## Где что
-- docs/SPEC.md — спецификация контракта. Источник правды. Не меняй поведение без правки SPEC.
-- docs/DECISIONS.md — принятые решения.
-- contracts/goal — контракт на Rust, near-sdk 5.
-- app — фронт на Next.js 16. Версия новая: сверяйся с документацией, а не с памятью.
+## Where things are
+- docs/SPEC.md — contract specification. The source of truth. Do not change behavior without editing SPEC.
+- docs/DECISIONS.md — decisions made.
+- contracts/goal — the contract in Rust, near-sdk 5.
+- app — frontend on Next.js 16. The version is new: check the documentation, not your memory.
 
-## Правила для контракта
-- Никаких админ-методов и смены параметров после new.
-- Сначала состояние, потом перевод; на перевод — колбэк с откатом.
-- Деление с округлением вниз, checked-арифметика.
-- Каждое изменение — с тестом. cargo test должен быть зелёным.
-- Только testnet. Ничего не делай в mainnet.
+## Contract rules
+- No admin methods and no parameter changes after new.
+- State first, then the transfer; every transfer gets a callback with rollback.
+- Division rounds down, checked arithmetic.
+- Every change comes with a test. cargo test must be green.
+- Testnet only. Do nothing on mainnet.
 
-## Окружение
-- macOS, обычный Терминал (zsh).
+## Environment
+- macOS, the regular Terminal (zsh).
 
-## Команды
+## Commands
 - cd contracts/goal && cargo test
 - cargo near build non-reproducible-wasm
-- деплой — по разделу 11 SPEC (синтаксис near-cli-rs сверяй с near --help)
+- deploy — per SPEC section 11 (check near-cli-rs syntax against near --help)
 
-## Документация
+## Documentation
 - https://docs.near.org/llms.txt
-- скиллы near-smart-contracts, near-contract-audit, near-cli-rs
+- skills near-smart-contracts, near-contract-audit, near-cli-rs
 
-## Как со мной работать
-- Я учусь Rust. Перед кодом — короткий план, после — что изменилось и почему.
-- Один шаг за раз. Не трогай то, что в задачу не входит.
-- Новые для меня конструкции Rust и near-sdk объясняй в двух-трёх предложениях.
+## How to work with me
+- Talk to me in Russian.
+- I am learning Rust. Before code, a short plan; after it, what changed and why.
+- One step at a time. Do not touch what is outside the task.
+- Explain Rust and near-sdk constructs that are new to me in two or three sentences.

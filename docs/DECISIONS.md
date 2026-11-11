@@ -1,38 +1,38 @@
-# Решения
+# Decisions
 
 ## 2026-11-08
 
-- Архитектура: без отдельного vault/treasury. Один контракт на цель, `fee_to` = адрес контракта цели.
-- Фабрика: Nearly. Выплата фисов на сторонний аккаунт проверена в mainnet (запуск #3680).
-- Доля «сразу»: 50% (`immediate_bps = 5000`), параметр `new`.
-- Верификатор в MVP: один аккаунт. Комитет 3 из 5 — только в симуляции на фронте.
-- Окно спора: параметр `new`, в демо 2 минуты.
-- Залог за спор: нет.
-- Сгоревшие фисы: остаются в контракте навсегда (нейтральный резерв).
-- Фисы с будущих сделок после провала этапа: сгорают пропорционально весу этапа.
-- Число этапов: 1–5.
-- Переподача после отказа: нет.
-- Файлы пруфов: на нашем сервере; в контракте ссылка и sha256.
-- Сеть для демо: только testnet.
+- Architecture: no separate vault/treasury. One contract per goal, `fee_to` = the goal contract address.
+- Factory: Nearly. Paying fees to a third-party account was verified on mainnet (launch #3680).
+- Immediate share: 50% (`immediate_bps = 5000`), a `new` parameter.
+- Verifier in the MVP: a single account. A 3-of-5 committee only as a simulation in the frontend.
+- Challenge window: a `new` parameter, 2 minutes in the demo.
+- Challenge bond: none.
+- Forfeited fees: stay in the contract forever (a neutral reserve).
+- Fees from future trades after a milestone fails: forfeited in proportion to the milestone weight.
+- Number of milestones: 1–5.
+- Resubmission after rejection: no.
+- Proof files: on our server; the contract stores the link and sha256.
+- Demo network: testnet only.
 
 ## 2026-11-09
 
-- Возврат неудачной выплаты не должен считаться доходом: `sync` никогда не уменьшает
-  `last_balance`, а пока выплата в пути (`payout_in_flight`), `sync` пропускается и `claim`
-  падает с `"Payout in progress"`. Газ колбэка — 10 TGas.
-- Окно оспаривания по умолчанию — 24 ч (86400000 мс), решено командой 9 ноября.
+- The refund of a failed payout must not count as income: `sync` never lowers
+  `last_balance`, and while a payout is in flight (`payout_in_flight`), `sync` is skipped and `claim`
+  fails with `"Payout in progress"`. Callback gas is 10 TGas.
+- Default challenge window is 24 h (86400000 ms), decided by the team on 9 November.
 
 ## 2026-11-10
 
-- По итогам аудита (docs/AUDIT.md): таймаут спора 24 ч. Если верификатор не решил спор за
-  24 часа после `challenge`, любой вызывает `resolve_timeout`, и этап засчитывается
-  креатору (Accepted). После таймаута `resolve` не работает.
-- Ограничения `new`: окно спора 60 с – 30 дней, дедлайн не дальше 365 дней, creator и
-  verifier не равны адресу контракта, депозит ≥ хранение + 2 × 16000 байт.
+- Following the audit (docs/AUDIT.md): 24 h dispute timeout. If the verifier has not resolved a dispute
+  within 24 hours after `challenge`, anyone calls `resolve_timeout`, and the milestone is accepted for
+  the creator (Accepted). After the timeout `resolve` no longer works.
+- `new` limits: challenge window 60 s – 30 days, deadline at most 365 days ahead, creator and
+  verifier differ from the contract address, deposit ≥ storage + 2 × 16000 bytes.
 
-## Открыто
+## Open
 
-- Может ли креатор сменить `fee_to` после запуска в Nearly.
-- Как Nearly выплачивает токеновую часть фисов на контракт.
-- Какие треки указать в заявке.
-- Кто подаёт заявку и получает приз.
+- Can the creator change `fee_to` after launch in Nearly.
+- How Nearly pays the token part of the fees to the contract.
+- Which tracks to list in the submission.
+- Who submits the application and receives the prize.

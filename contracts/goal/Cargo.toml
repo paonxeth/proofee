@@ -5,7 +5,7 @@ version = "0.1.0"
 edition = "2024"
 resolver = "3"
 rust-version = "1.95"
-# NEP-0330: ссылка доступна через view-метод `contract_source_metadata`.
+# NEP-0330: the link is available via the `contract_source_metadata` view method.
 repository = "https://github.com/paonxeth/proofee"
 
 [lib]

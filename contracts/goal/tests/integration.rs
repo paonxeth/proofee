@@ -1,4 +1,4 @@
-// Интеграционный тест 11 (SPEC 10): контракт в локальной песочнице NEAR.
+// Integration test 11 (SPEC 10): the contract in a local NEAR sandbox.
 use std::sync::Arc;
 
 use near_api::types::transaction::actions::{
@@ -12,9 +12,9 @@ use near_sandbox::config::{DEFAULT_GENESIS_ACCOUNT, DEFAULT_GENESIS_ACCOUNT_PRIV
 use near_sdk::serde_json::{self, Value, json};
 use testresult::TestResult;
 
-const WINDOW_MS: u64 = 600_000; // 10 минут: без fast_forward finalize обязан падать
+const WINDOW_MS: u64 = 600_000; // 10 minutes: without fast_forward, finalize must fail
 const DAY_MS: u64 = 86_400_000;
-// Замер в песочнице: около 300 мс на блок, 3000 блоков ≈ 15 мин > окна.
+// Measured in the sandbox: about 300 ms per block, 3000 blocks ≈ 15 min > window.
 const FAST_FORWARD_BLOCKS: u64 = 3_000;
 const PROOF_HASH: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
@@ -28,7 +28,7 @@ struct User {
 }
 
 struct Env {
-    // Песочница живёт, пока жив Env: при drop процесс останавливается.
+    // The sandbox lives as long as Env: on drop the process stops.
     sandbox: Sandbox,
     wasm: Vec<u8>,
     net: NetworkConfig,
@@ -103,7 +103,7 @@ async fn setup() -> TestResult<Env> {
     })
 }
 
-/// Как scripts/deploy-testnet.sh: одна транзакция от `owner`, у цели нет ключей.
+/// Like scripts/deploy-testnet.sh: one transaction from `owner`, the goal has no keys.
 async fn deploy_goal(
     net: &NetworkConfig,
     owner: &User,
@@ -175,7 +175,7 @@ impl Env {
     }
 }
 
-/// Текст ошибки неудачной транзакции. Если транзакция прошла, тест падает.
+/// Error text of a failed transaction. If the transaction succeeded, the test fails.
 fn failure(result: TransactionResult) -> String {
     format!("{:?}", result.assert_failure())
 }
@@ -184,19 +184,19 @@ fn failure(result: TransactionResult) -> String {
 async fn full_flow_claim() -> TestResult {
     let env = setup().await?;
 
-    // 1. Стартовый депозит — не доход: всё по нулям.
+    // 1. The initial deposit is not income: everything is zero.
     let start = env.balances().await?;
     for (k, v) in start.as_object().unwrap() {
-        assert_eq!(v, "0", "{k} после деплоя");
+        assert_eq!(v, "0", "{k} after deploy");
     }
 
-    // 2–3. Фисы 10 NEAR, sync от постороннего.
+    // 2–3. 10 NEAR of fees, sync from a stranger.
     env.send_fees(near(10)).await?;
     env.call(&env.stranger, "sync", json!({})).await?.assert_success();
     assert_eq!(env.field("total_received").await?, near(10));
     assert_eq!(env.field("claimable").await?, near(5));
 
-    // 4. Пруф по этапу 0.
+    // 4. Proof for milestone 0.
     env.call(
         &env.creator,
         "submit_proof",
@@ -205,27 +205,27 @@ async fn full_flow_claim() -> TestResult {
     .await?
     .assert_success();
 
-    // 5. Окно ещё открыто.
+    // 5. The window is still open.
     let err = failure(env.call(&env.stranger, "finalize", json!({"index": 0})).await?);
     assert!(err.contains("Window still open"), "{err}");
 
-    // 6. Сдвигаем время за окно.
+    // 6. Move time past the window.
     let before = block_time_ms(&env.net).await?;
     env.sandbox.fast_forward(FAST_FORWARD_BLOCKS).await?;
     let after = block_time_ms(&env.net).await?;
     println!(
-        "fast_forward({FAST_FORWARD_BLOCKS}) сдвинул время на {} мс",
+        "fast_forward({FAST_FORWARD_BLOCKS}) moved time by {} ms",
         after - before
     );
-    assert!(after - before > WINDOW_MS, "сдвиг {} мс", after - before);
+    assert!(after - before > WINDOW_MS, "shift {} ms", after - before);
 
-    // 7. Теперь finalize проходит: 5 сразу + 60% от заложенных 5.
+    // 7. Now finalize succeeds: 5 immediate + 60% of the 5 locked.
     env.call(&env.stranger, "finalize", json!({"index": 0}))
         .await?
         .assert_success();
     assert_eq!(env.field("claimable").await?, near(8));
 
-    // 8. claim: креатор получает 8 NEAR минус свой газ, контракт отдаёт 8 NEAR.
+    // 8. claim: the creator receives 8 NEAR minus their gas, the contract pays out 8 NEAR.
     let tolerance = NearToken::from_millinear(10).as_yoctonear();
     let creator_before = env.near_balance(&env.creator.id).await?;
     let goal_before = env.near_balance(&env.goal).await?;
@@ -238,15 +238,15 @@ async fn full_flow_claim() -> TestResult {
     let creator_gain = creator_after - creator_before;
     assert!(
         creator_gain <= near(8) && creator_gain > near(8) - tolerance,
-        "креатор получил {creator_gain}"
+        "creator received {creator_gain}"
     );
     let goal_loss = goal_before - goal_after;
     assert!(
         goal_loss.abs_diff(near(8)) < tolerance,
-        "контракт отдал {goal_loss}"
+        "contract paid out {goal_loss}"
     );
 
-    // 9. Колбэк отработал и снял флаг: повторный claim — «нечего забирать».
+    // 9. The callback ran and cleared the flag: a second claim gets "Nothing to claim".
     let err = failure(env.call(&env.creator, "claim", json!({})).await?);
     assert!(err.contains("Nothing to claim"), "{err}");
     Ok(())
@@ -272,14 +272,14 @@ async fn on_claim_transfer_is_private() -> TestResult {
     Ok(())
 }
 
-/// SPEC 3: депозит должен покрыть хранение и 2 × 16 000 байт запаса (AUDIT L-1, L-2).
-/// 3 NEAR, как в scripts/deploy-testnet.sh, хватает даже на строки максимальной длины;
-/// 1,9 NEAR — нет (код ≈ 1,6 NEAR + запас 0,32 NEAR).
+/// SPEC 3: the deposit must cover storage plus a 2 × 16 000 byte reserve (AUDIT L-1, L-2).
+/// 3 NEAR, as in scripts/deploy-testnet.sh, is enough even with maximum-length strings;
+/// 1.9 NEAR is not (code ≈ 1.6 NEAR + reserve 0.32 NEAR).
 #[tokio::test]
 async fn new_requires_storage_deposit() -> TestResult {
     let env = setup().await?;
     let now_ms = block_time_ms(&env.net).await?;
-    // 4-байтные символы: максимум байтов при лимитах в символах.
+    // 4-byte characters: the most bytes under character-based limits.
     let long = "𝕏".repeat(100);
     let milestones: Vec<Value> = (0..5)
         .map(|_| json!({"title": long, "weight_bps": 2000, "deadline_ms": now_ms + 7 * DAY_MS}))

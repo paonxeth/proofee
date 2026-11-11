@@ -1,4 +1,4 @@
-// Контракт цели ProoFee. Спецификация — docs/SPEC.md.
+// ProoFee goal contract. Specification: docs/SPEC.md.
 use near_sdk::serde_json::json;
 use near_sdk::{AccountId, Gas, NearToken, PanicOnDefault, Promise, env, near, require};
 
@@ -14,18 +14,18 @@ const MAX_REASON_LEN: usize = 280;
 const PROOF_HASH_LEN: usize = 64;
 const CALLBACK_GAS: Gas = Gas::from_tgas(10);
 const DAY_MS: u64 = 86_400_000;
-/// Окно спора: не короче минуты (иначе оспорить не успеть) и не длиннее 30 дней.
+/// Challenge window: at least a minute (otherwise nobody can challenge in time) and at most 30 days.
 const MIN_CHALLENGE_WINDOW_MS: u64 = 60_000;
 const MAX_CHALLENGE_WINDOW_MS: u64 = 30 * DAY_MS;
-/// Дедлайн этапа — не дальше года от момента `new`.
+/// A milestone deadline is at most a year after `new`.
 const MAX_DEADLINE_AHEAD_MS: u64 = 365 * DAY_MS;
-/// Запас хранения, который `claim` никогда не выплачивает (SPEC 3, 5.3). Покрывает
-/// 16 байт `payout_in_flight` и рост состояния: полное состояние цели ≈ 15 КБ.
+/// Storage reserve that `claim` never pays out (SPEC 3, 5.3). Covers the 16 bytes of
+/// `payout_in_flight` and state growth: a full goal state is ≈ 15 KB.
 const STORAGE_RESERVE_BYTES: u64 = 16_000;
-/// Сколько верификатор может решать спор; потом этап засчитывается креатору (SPEC 6).
+/// How long the verifier has to resolve a dispute; after that the milestone is accepted for the creator (SPEC 6).
 const RESOLVE_TIMEOUT_MS: u64 = DAY_MS;
 
-/// Этап, как его передают в `new`.
+/// A milestone as passed to `new`.
 #[near(serializers = [json])]
 pub struct MilestoneInput {
     pub title: String,
@@ -59,7 +59,7 @@ pub struct Milestone {
     pub challenged_at_ms: Option<u64>,
 }
 
-/// Ответ `get_goal`: параметры цели и этапы. Деньги — в `get_balances`.
+/// `get_goal` response: goal parameters and milestones. Money is in `get_balances`.
 #[near(serializers = [json])]
 pub struct GoalView {
     pub creator: AccountId,
@@ -72,7 +72,7 @@ pub struct GoalView {
     pub milestones: Vec<Milestone>,
 }
 
-/// Ответ `get_balances`. Формулы — SPEC 5.2, суммы в yoctoNEAR (строки в JSON).
+/// `get_balances` response. Formulas: SPEC 5.2; amounts in yoctoNEAR (strings in JSON).
 #[near(serializers = [json])]
 pub struct BalancesView {
     pub total_received: NearToken,
@@ -83,7 +83,7 @@ pub struct BalancesView {
     pub pending: NearToken,
     pub claimed: NearToken,
     pub claimable: NearToken,
-    /// Пришло на аккаунт, но ещё не учтено `sync`.
+    /// Received by the account but not yet counted by `sync`.
     pub unsynced: NearToken,
 }
 
@@ -101,7 +101,7 @@ pub struct Goal {
     total_received: NearToken,
     claimed: NearToken,
     last_balance: NearToken,
-    /// Выплата, по которой ещё не пришёл колбэк. Пока стоит, `sync` и `claim` заблокированы.
+    /// Payout whose callback has not arrived yet. While set, `sync` and `claim` are blocked.
     payout_in_flight: Option<NearToken>,
 }
 
@@ -109,7 +109,7 @@ fn title_ok(title: &str) -> bool {
     (1..=MAX_TITLE_LEN).contains(&title.chars().count())
 }
 
-/// sha256 в hex: ровно 64 символа `0-9a-f`.
+/// sha256 in hex: exactly 64 characters `0-9a-f`.
 fn is_valid_proof_hash(hash: &str) -> bool {
     hash.len() == PROOF_HASH_LEN
         && hash
@@ -117,7 +117,7 @@ fn is_valid_proof_hash(hash: &str) -> bool {
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
-/// Момент, когда истекает время верификатора на решение спора.
+/// The moment the verifier's time to resolve the dispute runs out.
 fn resolve_deadline(m: &Milestone) -> u64 {
     m.challenged_at_ms
         .unwrap_or_else(|| env::panic_str("No challenge time"))
@@ -125,7 +125,7 @@ fn resolve_deadline(m: &Milestone) -> u64 {
         .unwrap_or_else(|| math::overflow())
 }
 
-/// Стоимость хранения текущего `storage_usage` плюс `reserve_bytes`, в yoctoNEAR.
+/// Storage cost of the current `storage_usage` plus `reserve_bytes`, in yoctoNEAR.
 fn storage_cost_with_reserve(reserve_bytes: u64) -> u128 {
     u128::from(env::storage_usage())
         .checked_add(u128::from(reserve_bytes))
@@ -133,7 +133,7 @@ fn storage_cost_with_reserve(reserve_bytes: u64) -> u128 {
         .unwrap_or_else(|| math::overflow())
 }
 
-/// Момент, когда закрывается окно спора по поданному пруфу.
+/// The moment the challenge window for a submitted proof closes.
 fn window_end(m: &Milestone, challenge_window_ms: u64) -> u64 {
     m.submitted_at_ms
         .unwrap_or_else(|| env::panic_str("No submission time"))
@@ -154,7 +154,7 @@ impl Goal {
         milestones: Vec<MilestoneInput>,
     ) -> Self {
         require!(creator != verifier, "Creator and verifier must differ");
-        // У цели нет ключей: от её имени никто не вызовет claim или resolve.
+        // The goal has no keys: nobody can call claim or resolve on its behalf.
         let this = env::current_account_id();
         require!(creator != this, "Creator cannot be the contract");
         require!(verifier != this, "Verifier cannot be the contract");
@@ -212,7 +212,7 @@ impl Goal {
             })
             .collect::<Vec<_>>();
 
-        // Один резерв claim не выплачивает, второй уходит на рост состояния (SPEC 3).
+        // claim never pays out one reserve; the other covers state growth (SPEC 3).
         require!(
             env::account_balance().as_yoctonear()
                 >= storage_cost_with_reserve(2 * STORAGE_RESERVE_BYTES),
@@ -235,13 +235,13 @@ impl Goal {
             milestones,
             total_received: NearToken::from_yoctonear(0),
             claimed: NearToken::from_yoctonear(0),
-            // Стартовый депозит — не доход (SPEC 5.1).
+            // The initial deposit is not income (SPEC 5.1).
             last_balance: env::account_balance(),
             payout_in_flight: None,
         }
     }
 
-    /// Адрес токена — только для информации. Ставит креатор, один раз.
+    /// Token address, informational only. Set by the creator, once.
     pub fn set_token(&mut self, token: AccountId) {
         require!(
             env::predecessor_account_id() == self.creator,
@@ -251,15 +251,15 @@ impl Goal {
         self.token = Some(token);
     }
 
-    /// Приём NEAR. Депозит к началу вызова уже на балансе, `sync` учтёт его как доход.
+    /// Accepts NEAR. The deposit is already in the balance when the call starts; `sync` counts it as income.
     #[payable]
     pub fn deposit(&mut self) {
         self.sync();
     }
 
-    /// Всё, что выросло сверх `last_balance`, — новый доход (SPEC 5.1).
-    /// `last_balance` никогда не уменьшается, а пока выплата в пути, sync пропускается:
-    /// так возврат неудачной выплаты не посчитается доходом.
+    /// Anything above `last_balance` is new income (SPEC 5.1).
+    /// `last_balance` never decreases, and while a payout is in flight sync is skipped,
+    /// so the refund of a failed payout is never counted as income.
     pub fn sync(&mut self) {
         if self.payout_in_flight.is_some() {
             return;
@@ -281,7 +281,7 @@ impl Goal {
         }
     }
 
-    /// Pending → Submitted. Только creator, до дедлайна этапа.
+    /// Pending → Submitted. Creator only, before the milestone deadline.
     pub fn submit_proof(&mut self, index: u8, proof_uri: String, proof_hash: String) {
         self.check_index(index);
         require!(
@@ -305,7 +305,7 @@ impl Goal {
         );
     }
 
-    /// Submitted → Challenged. Любой, кроме creator, пока окно спора открыто.
+    /// Submitted → Challenged. Anyone except the creator, while the challenge window is open.
     pub fn challenge(&mut self, index: u8, reason: String) {
         self.check_index(index);
         let challenger = env::predecessor_account_id();
@@ -327,7 +327,7 @@ impl Goal {
         );
     }
 
-    /// Submitted → Accepted. Любой, после окна спора. Дедлайн не важен: пруф подан вовремя.
+    /// Submitted → Accepted. Anyone, after the challenge window. The deadline does not matter: the proof was submitted in time.
     pub fn finalize(&mut self, index: u8) {
         self.check_index(index);
         let now_ms = env::block_timestamp_ms();
@@ -340,7 +340,7 @@ impl Goal {
         emit_resolved(index, &m.status);
     }
 
-    /// Challenged → Accepted / Rejected. Только verifier, в течение 24 ч после спора.
+    /// Challenged → Accepted / Rejected. Verifier only, within 24 h of the challenge.
     pub fn resolve(&mut self, index: u8, accept: bool) {
         self.check_index(index);
         require!(
@@ -360,7 +360,7 @@ impl Goal {
         emit_resolved(index, &m.status);
     }
 
-    /// Challenged → Accepted. Любой, если верификатор не решил спор за 24 ч (AUDIT M-1).
+    /// Challenged → Accepted. Anyone, if the verifier has not resolved the dispute within 24 h (AUDIT M-1).
     pub fn resolve_timeout(&mut self, index: u8) {
         self.check_index(index);
         let now_ms = env::block_timestamp_ms();
@@ -372,7 +372,7 @@ impl Goal {
         emit_resolved(index, &m.status);
     }
 
-    /// Pending → Failed. Любой, после дедлайна.
+    /// Pending → Failed. Anyone, after the deadline.
     pub fn expire(&mut self, index: u8) {
         self.check_index(index);
         let now_ms = env::block_timestamp_ms();
@@ -384,7 +384,7 @@ impl Goal {
         emit_resolved(index, &m.status);
     }
 
-    /// Выплата креатору всего доступного (SPEC 5.3).
+    /// Pays the creator everything claimable (SPEC 5.3).
     pub fn claim(&mut self) -> Promise {
         require!(
             env::predecessor_account_id() == self.creator,
@@ -394,17 +394,17 @@ impl Goal {
         self.sync();
 
         let claimable = self.breakdown().claimable;
-        // Деньги, которые держат хранение, не выплачиваем. Запас покрывает 16 байт
-        // payout_in_flight: near-sdk запишет их уже после этого расчёта (AUDIT L-1).
+        // Money that pays for storage is never paid out. The reserve covers the 16 bytes of
+        // payout_in_flight: near-sdk writes them after this calculation (AUDIT L-1).
         let storage_cost = storage_cost_with_reserve(STORAGE_RESERVE_BYTES);
-        // Хранение дороже баланса → свободно 0 (вычитание с упором в ноль).
+        // Storage costs more than the balance → 0 is free (saturating subtraction).
         let free = env::account_balance()
             .as_yoctonear()
             .saturating_sub(storage_cost);
         let amount = NearToken::from_yoctonear(claimable.min(free));
         require!(!amount.is_zero(), "Nothing to claim");
 
-        // Сначала состояние, потом перевод.
+        // State first, then the transfer.
         self.claimed = self
             .claimed
             .checked_add(amount)
@@ -422,13 +422,13 @@ impl Goal {
         )
     }
 
-    /// Итог перевода из `claim`. При неудаче откатывает счётчики.
-    /// Здесь нет проверок, которые могут упасть: невыполненный колбэк оставит флаг
-    /// выплаты навсегда.
+    /// Result of the transfer from `claim`. Rolls the counters back on failure.
+    /// There are no checks here that can fail: a failed callback would leave the payout
+    /// flag set forever.
     #[private]
     pub fn on_claim_transfer(&mut self, amount: NearToken) {
         self.payout_in_flight = None;
-        // У перевода пустой результат, поэтому max_len = 0.
+        // A transfer has an empty result, hence max_len = 0.
         let transferred = env::promise_result_checked(0, 0).is_ok();
         if transferred {
             events::emit(
@@ -480,7 +480,7 @@ impl Goal {
     }
 }
 
-/// Событие `milestone_resolved`: `by` — тот, кто вызвал метод.
+/// `milestone_resolved` event: `by` is the account that called the method.
 fn emit_resolved(index: u8, status: &MilestoneStatus) {
     events::emit(
         "milestone_resolved",
@@ -496,7 +496,7 @@ impl Goal {
         );
     }
 
-    /// Раскладка учтённого дохода по формулам SPEC 5.2.
+    /// Breakdown of counted income by the SPEC 5.2 formulas.
     fn breakdown(&self) -> math::Breakdown {
         let (w_acc, w_lost) = self.weights();
         math::compute(
@@ -508,7 +508,7 @@ impl Goal {
         )
     }
 
-    /// (W_acc, W_lost): сумма весов принятых и отклонённых/проваленных этапов.
+    /// (W_acc, W_lost): total weight of accepted and of rejected/failed milestones.
     fn weights(&self) -> (u32, u32) {
         let mut w_acc: u32 = 0;
         let mut w_lost: u32 = 0;
@@ -548,18 +548,18 @@ mod tests {
         "stranger.testnet".parse().unwrap()
     }
 
-    /// Окружение: вызывает `predecessor`, время NOW_MS, на балансе контракта 5 NEAR.
+    /// Context: `predecessor` calls at NOW_MS, the contract balance is 5 NEAR.
     fn set_context(predecessor: AccountId) {
         set_context_with(predecessor, NearToken::from_near(5), NearToken::from_near(0));
     }
 
-    /// `balance` — баланс до зачисления депозита. Рантайм (и мок near-sdk) сам прибавляет
-    /// `deposit`, поэтому `env::account_balance()` внутри вызова = `balance + deposit`.
+    /// `balance` is the balance before the deposit. The runtime (and the near-sdk mock) adds
+    /// `deposit` itself, so `env::account_balance()` inside the call = `balance + deposit`.
     fn set_context_with(predecessor: AccountId, balance: NearToken, deposit: NearToken) {
         set_env(predecessor, NOW_MS, balance, deposit);
     }
 
-    /// Окружение целиком: кто вызывает, время в мс, баланс до депозита, депозит.
+    /// Full context: caller, time in ms, balance before the deposit, deposit.
     fn set_env(predecessor: AccountId, now_ms: u64, balance: NearToken, deposit: NearToken) {
         let mut builder = VMContextBuilder::new();
         builder
@@ -571,7 +571,7 @@ mod tests {
         testing_env!(builder.build());
     }
 
-    /// Вызов от `predecessor` в момент `now_ms`, баланс 5 NEAR.
+    /// Call from `predecessor` at `now_ms`, balance 5 NEAR.
     fn set_time(predecessor: AccountId, now_ms: u64) {
         set_env(predecessor, now_ms, NearToken::from_near(5), NearToken::from_near(0));
     }
@@ -600,7 +600,7 @@ mod tests {
         )
     }
 
-    /// Как `new_goal`, но с произвольными строками, долей и окном.
+    /// Like `new_goal`, but with arbitrary strings, immediate share and window.
     fn new_goal_with(
         goal_title: &str,
         goal_uri: &str,
@@ -619,7 +619,7 @@ mod tests {
         )
     }
 
-    // SPEC 10, тест 1
+    // SPEC 10, test 1
     #[test]
     #[should_panic(expected = "Weights must sum to 10000")]
     fn new_rejects_weights_not_summing_to_10000() {
@@ -627,7 +627,7 @@ mod tests {
         new_goal(verifier(), milestones(&[4000, 3000, 2000]));
     }
 
-    // SPEC 10, тест 2
+    // SPEC 10, test 2
     #[test]
     #[should_panic(expected = "Need 1-5 milestones")]
     fn new_rejects_zero_milestones() {
@@ -721,7 +721,7 @@ mod tests {
         new_goal_with("Goal", "", 5000, 0, milestones(&[10_000]));
     }
 
-    // AUDIT M-2: окно в 1 мс делало оспаривание невозможным.
+    // AUDIT M-2: a 1 ms window made challenging impossible.
     #[test]
     #[should_panic(expected = "Window too short")]
     fn new_rejects_window_below_minute() {
@@ -729,7 +729,7 @@ mod tests {
         new_goal_with("Goal", "", 5000, 59_999, milestones(&[10_000]));
     }
 
-    // AUDIT L-3: окно u64::MAX ломало window_end и запирало этап в Submitted.
+    // AUDIT L-3: a u64::MAX window broke window_end and locked the milestone in Submitted.
     #[test]
     #[should_panic(expected = "Window too long")]
     fn new_rejects_window_above_30_days() {
@@ -737,7 +737,7 @@ mod tests {
         new_goal_with("Goal", "", 5000, 30 * DAY_MS + 1, milestones(&[10_000]));
     }
 
-    // AUDIT L-3: дедлайн в далёком будущем не давал этапу провалиться.
+    // AUDIT L-3: a deadline far in the future kept the milestone from ever failing.
     #[test]
     #[should_panic(expected = "Deadline too far")]
     fn new_rejects_deadline_beyond_year() {
@@ -756,16 +756,16 @@ mod tests {
         assert_eq!(goal.get_goal().challenge_window_ms, 30 * DAY_MS);
     }
 
-    /// `new` при балансе `balance` и хранении по умолчанию в моке (307 200 байт).
+    /// `new` with balance `balance` and the mock's default storage (307 200 bytes).
     fn new_with_balance(balance: NearToken) -> Goal {
         set_context_with(creator(), balance, NearToken::from_near(0));
         new_goal(verifier(), milestones(&[10_000]))
     }
 
-    /// Минимальный депозит: (307 200 + 2 × 16 000) байт × 10^19 yocto.
+    /// Minimum deposit: (307 200 + 2 × 16 000) bytes × 10^19 yocto.
     const MIN_DEPOSIT_YOCTO: u128 = 339_200 * 10_000_000_000_000_000_000;
 
-    // AUDIT L-2: без запаса хранение оплачивалось бы из дохода креатора.
+    // AUDIT L-2: without a reserve, storage would be paid from the creator's income.
     #[test]
     #[should_panic(expected = "Deposit too small for storage")]
     fn new_rejects_deposit_below_storage_reserve() {
@@ -778,7 +778,7 @@ mod tests {
         assert_eq!(goal.total_received, NearToken::from_yoctonear(0));
     }
 
-    // AUDIT L-4: у цели нет ключей, claim от её имени вызвать некому.
+    // AUDIT L-4: the goal has no keys, nobody can call claim on its behalf.
     #[test]
     #[should_panic(expected = "Creator cannot be the contract")]
     fn new_rejects_creator_equal_to_contract() {
@@ -794,7 +794,7 @@ mod tests {
         );
     }
 
-    // AUDIT L-4: resolve от имени цели вызвать некому, споры зависли бы навсегда.
+    // AUDIT L-4: nobody can call resolve on the goal's behalf, disputes would hang forever.
     #[test]
     #[should_panic(expected = "Verifier cannot be the contract")]
     fn new_rejects_verifier_equal_to_contract() {
@@ -805,11 +805,11 @@ mod tests {
     #[test]
     fn new_accepts_limits() {
         set_context(creator());
-        // Длина считается в символах, не в байтах: «я» — 2 байта, но 1 символ.
+        // Length is counted in characters, not bytes: "é" is 2 bytes but 1 character.
         let mut ms = milestones(&[10_000]);
-        ms[0].title = "я".repeat(100);
+        ms[0].title = "é".repeat(100);
         ms[0].deadline_ms = NOW_MS + 1;
-        let goal = new_goal_with(&"я".repeat(100), &"a".repeat(256), 10_000, 60_000, ms);
+        let goal = new_goal_with(&"é".repeat(100), &"a".repeat(256), 10_000, 60_000, ms);
         assert_eq!(goal.get_goal().immediate_bps, 10_000);
     }
 
@@ -876,7 +876,7 @@ mod tests {
         goal.set_token("meme.testnet".parse().unwrap());
     }
 
-    // SPEC 10, тест 3
+    // SPEC 10, test 3
     #[test]
     fn sync_ignores_initial_deposit() {
         set_context(creator());
@@ -892,7 +892,7 @@ mod tests {
         set_context(creator());
         let mut goal = new_goal(verifier(), milestones(&[10_000]));
 
-        // На контракт пришло 10 NEAR обычным переводом.
+        // 10 NEAR arrived at the contract as a plain transfer.
         set_context_with(stranger(), NearToken::from_near(15), NearToken::from_near(0));
         assert_eq!(goal.get_balances().unsynced, NearToken::from_near(10));
 
@@ -919,7 +919,7 @@ mod tests {
         set_context(creator());
         let mut goal = new_goal(verifier(), milestones(&[10_000]));
 
-        // Было 5 NEAR, приложено 2: внутри вызова баланс 7.
+        // 5 NEAR before, 2 attached: the balance inside the call is 7.
         set_context_with(stranger(), NearToken::from_near(5), NearToken::from_near(2));
         assert_eq!(env::account_balance(), NearToken::from_near(7));
         goal.deposit();
@@ -927,15 +927,15 @@ mod tests {
         assert_eq!(goal.last_balance, NearToken::from_near(7));
     }
 
-    // ---- Этапы (SPEC 6) ----
+    // ---- Milestones (SPEC 6) ----
 
     const WINDOW_MS: u64 = 120_000;
     const DEADLINE_MS: u64 = NOW_MS + DAY_MS;
-    // sha256 пустой строки.
+    // sha256 of the empty string.
     const HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     const URI: &str = "https://proofee.example/proof/1";
 
-    /// Цель с этапами 40/30/30 и окном 2 минуты.
+    /// Goal with milestones 40/30/30 and a 2-minute window.
     fn goal3() -> Goal {
         set_context(creator());
         new_goal(verifier(), milestones(&[4000, 3000, 3000]))
@@ -946,7 +946,7 @@ mod tests {
         goal.submit_proof(index, URI.to_string(), HASH.to_string());
     }
 
-    /// Баланс стал 5 + `total_near` NEAR (всего пришло `total_near`) — и sync.
+    /// The balance becomes 5 + `total_near` NEAR (`total_near` received in total), then sync.
     fn receive_and_sync(goal: &mut Goal, total_near: u128) {
         set_context_with(
             stranger(),
@@ -967,7 +967,7 @@ mod tests {
         submit_at(&mut goal, 3, NOW_MS);
     }
 
-    // SPEC 10, тест 5
+    // SPEC 10, test 5
     #[test]
     fn submit_proof_by_creator() {
         let mut goal = goal3();
@@ -1012,10 +1012,10 @@ mod tests {
     #[test]
     fn submit_proof_checks_hash() {
         let bad = [
-            HASH.to_uppercase(),           // верхний регистр
-            HASH[..63].to_string(),        // 63 символа
-            format!("{}g", &HASH[..63]),   // не hex
-            format!("{HASH}0"),            // 65 символов
+            HASH.to_uppercase(),           // upper case
+            HASH[..63].to_string(),        // 63 characters
+            format!("{}g", &HASH[..63]),   // not hex
+            format!("{HASH}0"),            // 65 characters
         ];
         for hash in bad {
             let mut goal = goal3();
@@ -1037,7 +1037,7 @@ mod tests {
         goal.submit_proof(0, "a".repeat(257), HASH.to_string());
     }
 
-    // SPEC 10, тест 6
+    // SPEC 10, test 6
     #[test]
     fn challenge_within_window() {
         let mut goal = goal3();
@@ -1098,7 +1098,7 @@ mod tests {
         goal.challenge(0, "a".repeat(281));
     }
 
-    // SPEC 10, тест 7
+    // SPEC 10, test 7
     #[test]
     #[should_panic(expected = "Window still open")]
     fn finalize_rejects_open_window() {
@@ -1122,7 +1122,7 @@ mod tests {
         assert!(log.contains(r#""status":"Accepted""#));
         assert!(log.contains(r#""by":"stranger.testnet""#));
 
-        // Заложено 5 NEAR, этап 40% → разлочено 2, доступно 5 + 2.
+        // 5 NEAR locked, milestone 40% → 2 unlocked, 5 + 2 claimable.
         let b = goal.get_balances();
         assert_eq!(b.unlocked, NearToken::from_near(2));
         assert_eq!(b.forfeited, NearToken::from_near(0));
@@ -1139,7 +1139,7 @@ mod tests {
         assert_eq!(status(&goal, 0), MilestoneStatus::Accepted);
     }
 
-    // SPEC 10, тест 8
+    // SPEC 10, test 8
     fn challenged(index: u8) -> Goal {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
@@ -1183,7 +1183,7 @@ mod tests {
         assert_eq!(status(&goal, 1), MilestoneStatus::Rejected);
         assert!(get_logs()[0].contains(r#""by":"verifier.testnet""#));
 
-        // Заложено 5 NEAR, этап 30% → сгорело 1,5.
+        // 5 NEAR locked, milestone 30% → 1.5 forfeited.
         let b = goal.get_balances();
         assert_eq!(b.forfeited, NearToken::from_millinear(1500));
         assert_eq!(b.unlocked, NearToken::from_near(0));
@@ -1199,7 +1199,7 @@ mod tests {
         goal.resolve(1, true);
     }
 
-    // ---- Таймаут спора (SPEC 6, AUDIT M-1). challenged() оспаривает в NOW_MS + 1. ----
+    // ---- Dispute timeout (SPEC 6, AUDIT M-1). challenged() challenges at NOW_MS + 1. ----
 
     #[test]
     fn resolve_works_until_timeout() {
@@ -1232,7 +1232,7 @@ mod tests {
         goal.resolve_timeout(0);
 
         assert_eq!(status(&goal, 0), MilestoneStatus::Accepted);
-        // 10 NEAR: сразу 5, этап 0 (40%) разлочивает 2.
+        // 10 NEAR: 5 immediate, milestone 0 (40%) unlocks 2.
         assert_eq!(goal.get_balances().claimable, NearToken::from_near(7));
         let logs = get_logs();
         assert!(logs[0].contains(r#""event":"milestone_resolved""#));
@@ -1256,7 +1256,7 @@ mod tests {
         goal.resolve(1, false);
         assert_eq!(goal.get_balances().forfeited, NearToken::from_millinear(1500));
 
-        // После отказа пришло ещё 10 NEAR: всего 20, заложено 10.
+        // After the rejection another 10 NEAR arrived: 20 in total, 10 locked.
         receive_and_sync(&mut goal, 20);
         let b = goal.get_balances();
         assert_eq!(b.total_received, NearToken::from_near(20));
@@ -1266,7 +1266,7 @@ mod tests {
         assert_eq!(b.claimable, NearToken::from_near(10));
     }
 
-    // SPEC 10, тест 9
+    // SPEC 10, test 9
     #[test]
     #[should_panic(expected = "Deadline not passed")]
     fn expire_rejects_before_deadline() {
@@ -1295,9 +1295,9 @@ mod tests {
         goal.expire(2);
     }
 
-    // ---- Выплата (SPEC 5.3) ----
+    // ---- Payout (SPEC 5.3) ----
 
-    /// Вызов `claim`: баланс и занятое хранилище в байтах задаются явно.
+    /// Calls `claim` with an explicit balance and storage usage in bytes.
     fn set_claim_env(predecessor: AccountId, balance: NearToken, storage_usage: u64) {
         let mut builder = VMContextBuilder::new();
         builder
@@ -1309,7 +1309,7 @@ mod tests {
         testing_env!(builder.build());
     }
 
-    /// Вызов колбэка: его вызывает сам контракт, результат перевода — `result`.
+    /// Calls the callback: the contract calls it itself, the transfer result is `result`.
     fn set_callback_env(balance: NearToken, result: PromiseResult) {
         let mut builder = VMContextBuilder::new();
         builder
@@ -1326,7 +1326,7 @@ mod tests {
         );
     }
 
-    /// Цель 40/30/30, пришло 10 NEAR (баланс 15), creator уже вызвал `claim` на 5 NEAR.
+    /// Goal 40/30/30, 10 NEAR received (balance 15), the creator has already called `claim` for 5 NEAR.
     fn claimed_goal() -> Goal {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
@@ -1335,13 +1335,13 @@ mod tests {
         goal
     }
 
-    /// Пришёл колбэк по выплате 5 NEAR; `balance_near` — баланс в этот момент.
+    /// The callback for the 5 NEAR payout arrives; `balance_near` is the balance at that moment.
     fn callback(goal: &mut Goal, balance_near: u128, result: PromiseResult) {
         set_callback_env(NearToken::from_near(balance_near), result);
         goal.on_claim_transfer(NearToken::from_near(5));
     }
 
-    /// `sync` от стороннего аккаунта при балансе `balance_near`.
+    /// `sync` from a third-party account at balance `balance_near`.
     fn sync_at(goal: &mut Goal, balance_near: u128) {
         set_context_with(
             stranger(),
@@ -1351,18 +1351,18 @@ mod tests {
         goal.sync();
     }
 
-    // SPEC 10, тест 10
+    // SPEC 10, test 10
     #[test]
     fn claim_pays_exactly_claimable() {
         let mut goal = claimed_goal();
         assert_eq!(goal.claimed, NearToken::from_near(5));
-        // Мок, как и сеть, списал перевод с баланса сразу.
+        // The mock, like the network, deducted the transfer from the balance right away.
         assert_eq!(env::account_balance(), NearToken::from_near(10));
         assert_eq!(goal.last_balance, NearToken::from_near(10));
         assert_eq!(goal.get_balances().claimable, NearToken::from_near(0));
         assert_eq!(goal.payout_in_flight, Some(NearToken::from_near(5)));
 
-        // Выплата — не «минус доход»: после колбэка sync ничего нового не видит.
+        // A payout is not "negative income": after the callback sync sees nothing new.
         callback(&mut goal, 10, PromiseResult::Successful(vec![]));
         sync_at(&mut goal, 10);
         assert_eq!(goal.total_received, NearToken::from_near(10));
@@ -1389,7 +1389,7 @@ mod tests {
     fn claim_rejects_stranger() {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
-        let _ = goal.claim(); // receive_and_sync оставил вызывающим stranger
+        let _ = goal.claim(); // receive_and_sync left stranger as the caller
     }
 
     #[test]
@@ -1432,7 +1432,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Nothing to claim")]
     fn claim_spec_example_through_contract() {
-        // 100 NEAR, этап 0 принят, этап 1 отклонён: доступно 50 + 20.
+        // 100 NEAR, milestone 0 accepted, milestone 1 rejected: 50 + 20 claimable.
         let mut goal = goal3();
         receive_and_sync(&mut goal, 100);
         submit_at(&mut goal, 0, NOW_MS);
@@ -1459,8 +1459,8 @@ mod tests {
     fn claim_keeps_storage_reserve() {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
-        // Хранение 1 084 000 байт + запас 16 000 = 11 NEAR. Свободно 15 − 11 = 4 < 5.
-        // Без запаса (AUDIT L-1) выплата была бы 4,16 NEAR.
+        // Storage 1 084 000 bytes + reserve 16 000 = 11 NEAR. Free: 15 − 11 = 4 < 5.
+        // Without the reserve (AUDIT L-1) the payout would be 4.16 NEAR.
         set_claim_env(creator(), NearToken::from_near(15), 1_084_000);
         let _ = goal.claim();
         assert_eq!(goal.claimed, NearToken::from_near(4));
@@ -1472,12 +1472,12 @@ mod tests {
     fn claim_nothing_when_storage_takes_all() {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
-        // Хранение 1 600 000 байт = 16 NEAR, больше баланса.
+        // Storage 1 600 000 bytes = 16 NEAR, more than the balance.
         set_claim_env(creator(), NearToken::from_near(15), 1_600_000);
         let _ = goal.claim();
     }
 
-    // ---- Возврат неудачной выплаты (SPEC 5.1, 5.3) ----
+    // ---- Refund of a failed payout (SPEC 5.1, 5.3) ----
 
     #[test]
     fn sync_never_lowers_last_balance() {
@@ -1489,35 +1489,35 @@ mod tests {
         assert!(get_logs().is_empty());
     }
 
-    // (а) возврат пришёл после колбэка, между ними был sync.
+    // (a) the refund arrived after the callback, with a sync in between.
     #[test]
     fn refund_after_callback_is_not_income() {
         let mut goal = claimed_goal();
         callback(&mut goal, 10, PromiseResult::Failed);
         assert_eq!(goal.last_balance, NearToken::from_near(15));
 
-        // Денег ещё нет: баланс ниже last_balance, sync его не опускает.
+        // The money is not back yet: the balance is below last_balance, sync does not lower it.
         sync_at(&mut goal, 10);
         assert_eq!(goal.last_balance, NearToken::from_near(15));
         assert!(get_logs().is_empty());
 
-        // Возврат пришёл.
+        // The refund arrived.
         sync_at(&mut goal, 15);
         assert_eq!(goal.total_received, NearToken::from_near(10));
         assert!(get_logs().is_empty());
 
-        // Креатор может забрать свои 5 заново — и не больше.
+        // The creator can claim their 5 again, and no more.
         set_context_with(creator(), NearToken::from_near(15), NearToken::from_near(0));
         let _ = goal.claim();
         assert_eq!(goal.claimed, NearToken::from_near(5));
     }
 
-    // (б) возврат пришёл до колбэка, между ними был sync.
+    // (b) the refund arrived before the callback, with a sync in between.
     #[test]
     fn refund_before_callback_is_not_income() {
         let mut goal = claimed_goal();
 
-        // Баланс вернулся к 15, но выплата в пути — sync пропущен.
+        // The balance is back at 15, but a payout is in flight: sync is skipped.
         sync_at(&mut goal, 15);
         assert_eq!(goal.last_balance, NearToken::from_near(10));
         assert_eq!(goal.total_received, NearToken::from_near(10));
@@ -1531,11 +1531,11 @@ mod tests {
         assert_eq!(goal.get_balances().claimable, NearToken::from_near(5));
     }
 
-    // (в) настоящий доход во время выплаты — ровно один раз. Выплата прошла.
+    // (c) real income during a payout is counted exactly once. The payout succeeded.
     #[test]
     fn income_during_successful_payout_counted_once() {
         let mut goal = claimed_goal();
-        sync_at(&mut goal, 13); // пришло 3 NEAR, sync пропущен
+        sync_at(&mut goal, 13); // 3 NEAR arrived, sync skipped
         assert_eq!(goal.total_received, NearToken::from_near(10));
 
         callback(&mut goal, 13, PromiseResult::Successful(vec![]));
@@ -1545,23 +1545,23 @@ mod tests {
         assert_eq!(goal.total_received, NearToken::from_near(13));
     }
 
-    // (в) то же, но выплата не прошла и возврат пришёл последним.
+    // (c) same, but the payout failed and the refund arrived last.
     #[test]
     fn income_during_failed_payout_counted_once() {
         let mut goal = claimed_goal();
-        callback(&mut goal, 13, PromiseResult::Failed); // 3 NEAR уже пришли, возврата нет
+        callback(&mut goal, 13, PromiseResult::Failed); // 3 NEAR already arrived, no refund yet
         assert_eq!(goal.last_balance, NearToken::from_near(15));
 
         sync_at(&mut goal, 13);
         assert_eq!(goal.total_received, NearToken::from_near(10));
 
-        sync_at(&mut goal, 18); // возврат пришёл
+        sync_at(&mut goal, 18); // the refund arrived
         assert_eq!(goal.total_received, NearToken::from_near(13));
         sync_at(&mut goal, 18);
         assert_eq!(goal.total_received, NearToken::from_near(13));
     }
 
-    // (г)
+    // (d)
     #[test]
     #[should_panic(expected = "Payout in progress")]
     fn claim_during_payout_fails() {

@@ -1,79 +1,79 @@
 # ProoFee
 
-ProoFee — контракт-копилка для фисов мемкоина на NEAR. Фисы токена идут не креатору напрямую,
-а на контракт цели. Часть креатор может забрать сразу, остальное разлочивается по этапам:
-он публикует пруф, сообщество может его оспорить, спор решает верификатор.
+ProoFee is an escrow contract for memecoin fees on NEAR. Token fees go not to the creator directly
+but to a goal contract. The creator can claim part of them immediately; the rest unlocks milestone by
+milestone: the creator publishes a proof, the community can challenge it, and the verifier resolves the dispute.
 
-Хакатон NEAR, трек 11. Только testnet.
+NEAR hackathon, track 11. Testnet only.
 
-## Как работает контракт
+## How the contract works
 
-Полное описание — [docs/SPEC.md](docs/SPEC.md), принятые решения — [docs/DECISIONS.md](docs/DECISIONS.md),
-аудит — [docs/AUDIT.md](docs/AUDIT.md).
+Full description: [docs/SPEC.md](docs/SPEC.md); decisions: [docs/DECISIONS.md](docs/DECISIONS.md);
+audit: [docs/AUDIT.md](docs/AUDIT.md).
 
-Коротко:
-- `new` фиксирует креатора, верификатора, долю «сразу» (`immediate_bps`), окно оспаривания и
-  1–5 этапов с весами и дедлайнами. Админ-методов и смены параметров нет.
-- Любое поступление NEAR сверх учтённого баланса — доход. `sync` его учитывает.
-- Этап: `submit_proof` (креатор) → окно оспаривания → `finalize` (любой) или
-  `challenge` (любой, кроме креатора) → `resolve` (верификатор). Если верификатор не решил
-  спор за 24 ч, любой вызывает `resolve_timeout`, и этап засчитывается креатору. Этап,
-  не сданный до дедлайна, закрывается через `expire`.
-- Доля принятого этапа становится доступной креатору, доля отклонённого или просроченного
-  сгорает, в том числе из будущих фисов. `claim` выплачивает доступное. Неудачный перевод
-  откатывается в колбэке.
+In short:
+- `new` fixes the creator, the verifier, the immediate share (`immediate_bps`), the challenge window and
+  1–5 milestones with weights and deadlines. There are no admin methods and no parameter changes.
+- Any NEAR received above the accounted balance is income. `sync` counts it.
+- A milestone: `submit_proof` (creator) → challenge window → `finalize` (anyone) or
+  `challenge` (anyone except the creator) → `resolve` (verifier). If the verifier has not resolved
+  the dispute within 24 h, anyone calls `resolve_timeout`, and the milestone is accepted for the creator. A
+  milestone not submitted before its deadline is closed with `expire`.
+- An accepted milestone's share becomes claimable by the creator; a rejected or expired milestone's
+  share is forfeited, including from future fees. `claim` pays out the claimable amount. A failed transfer
+  is rolled back in the callback.
 
-## Демо-цель
+## Demo goal
 
 [`goal-3.proofee-anton.testnet`](https://testnet.nearblocks.io/address/goal-3.proofee-anton.testnet)
-— окно оспаривания 2 минуты, три этапа 40/30/30, ключей у аккаунта нет.
+— 2-minute challenge window, three milestones 40/30/30, the account has no keys.
 
 ```sh
 near contract call-function as-read-only goal-3.proofee-anton.testnet get_balances \
   json-args '{}' network-config testnet now
 ```
 
-## Тесты
+## Tests
 
 ```sh
 cd contracts/goal && cargo test
 ```
 
-Юнит-тесты работают в моке near-sdk. Интеграционные (`contracts/goal/tests/integration.rs`)
-поднимают локальную песочницу через near-sandbox; первый запуск скачивает её бинарник.
+Unit tests run in the near-sdk mock. Integration tests (`contracts/goal/tests/integration.rs`)
+start a local sandbox via near-sandbox; the first run downloads its binary.
 
-## Деплой в testnet
+## Deploying to testnet
 
-Нужны Rust (версия зафиксирована в `contracts/goal/rust-toolchain.toml`), `cargo-near` и
-`near-cli-rs`. Ключ `MASTER` должен лежать в связке ключей, аккаунт верификатора
-`verifier.$MASTER` должен существовать.
+You need Rust (the version is pinned in `contracts/goal/rust-toolchain.toml`), `cargo-near` and
+`near-cli-rs`. The `MASTER` key must be in the keychain, and the verifier account
+`verifier.$MASTER` must exist.
 
 ```sh
-scripts/deploy-testnet.sh                        # goal-<первый свободный N>.proofee-anton.testnet
+scripts/deploy-testnet.sh                        # goal-<first free N>.proofee-anton.testnet
 N=5 MASTER=me.testnet scripts/deploy-testnet.sh
 ```
 
-Скрипт собирает wasm и одной транзакцией от `MASTER` создаёт цель: аккаунт, 3 NEAR, код и
-`new`. Ключей у цели нет, забрать с неё NEAR можно только через `claim`.
+The script builds the wasm and creates the goal in one transaction from `MASTER`: account, 3 NEAR, code and
+`new`. The goal has no keys; NEAR can leave it only through `claim`.
 
-## Известные ограничения
+## Known limitations
 
-Подробно — раздел «Статус исправлений» в [docs/AUDIT.md](docs/AUDIT.md).
+Details: the "Fix status" section in [docs/AUDIT.md](docs/AUDIT.md).
 
-- **Не отправляйте на цель токены (NEP-141), включая сам мемкоин и wNEAR.** Контракт учитывает
-  только NEAR. `ft_transfer` на цель — безвозвратная потеря, `ft_transfer_call` упадёт, и
-  токены вернутся.
-- Верификатор может сам оспорить этап и отклонить его. Защиты нет, нужен мультисиг или DAO
-  и залог за спор (M-3).
-- Если креатор удалит свой аккаунт верхнего уровня, имя может занять другой человек и
-  забрать доступное (L-5).
-- В демо креатор и верификатор принадлежат одному человеку: верификатор —
-  субаккаунт `MASTER`. Для настоящих целей так нельзя (L-5).
-- Методы не требуют 1 yoctoNEAR, поэтому их можно вызвать function-call ключом без
-  подтверждения в кошельке. Утечка такого ключа верификатора позволит отклонять этапы (L-6).
-- Пока выплата в пути, `unsynced` в `get_balances` может показывать пришедший возврат как
-  доход (I-2). Оспаривание, отправленное в последние секунды окна, может не успеть (I-7).
+- **Do not send tokens (NEP-141) to a goal, including the memecoin itself and wNEAR.** The contract accounts
+  for NEAR only. `ft_transfer` to a goal is an irreversible loss; `ft_transfer_call` fails and the
+  tokens are returned.
+- The verifier can challenge a milestone themselves and reject it. There is no protection; this needs a multisig or DAO
+  and a challenge bond (M-3).
+- If the creator deletes their top-level account, someone else can take the name and
+  claim the claimable amount (L-5).
+- In the demo the creator and the verifier belong to the same person: the verifier is a
+  subaccount of `MASTER`. Real goals must not do this (L-5).
+- Methods do not require 1 yoctoNEAR, so they can be called with a function-call key without
+  wallet confirmation. A leaked function-call key of the verifier would allow rejecting milestones (L-6).
+- While a payout is in flight, `unsynced` in `get_balances` may show an arrived refund as
+  income (I-2). A challenge sent in the last seconds of the window may not make it in time (I-7).
 
-## Лицензия
+## License
 
-MIT, см. [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
