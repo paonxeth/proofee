@@ -5,7 +5,7 @@
 - 57 Treasury unit tests PASS, including 24 Phase A tests retained/strengthened and new production-intent/reward/economic/auth/time-boundary tests.
 - 18 Mock Goal unit tests PASS: registration and retry, verification/binding, qualification, verifier authorization, decision/settlement callbacks, funding/recovery, claim, refresh, stale callback protections.
 - Both default WASM builds PASS (Rust1.99.1, near-sdk5.30.1, locked dependencies).
-- Real near-workspaces / nearcore2.14.1 sandbox workflow PASS:9 scenario groups. Actual VM, signed transactions, asynchronous receipts and NEAR transfers. No mocked PromiseResult in integration suite. Full output evidence/sandbox.log; list of unit tests evidence/test-list.log, unit results evidence/unit.log. Local hashes in sandbox log are NOT public Testnet hashes.
+- Real near-workspaces / nearcore2.14.1 sandbox workflow PASS:10 scenario groups plus1 focused workflow (11 total). Actual VM, signed transactions, asynchronous receipts and NEAR transfers. No mocked PromiseResult in integration suite. Full output evidence/sandbox.log; list of unit tests evidence/test-list.log, unit results evidence/unit.log. Local hashes in sandbox log are NOT public Testnet hashes.
 
 Integration groups:
 1. Production WASM export inspection (evidence/wasm-exports.json) confirms no register_demo_case; runtime scenarios check exact amount/payer; duplicate deposit; authorization/private callback rejection; Qualification rejection refunds full2NEAR.
@@ -15,8 +15,9 @@ Integration groups:
 5. Active arbitration timeout -> neutral Refund; late verifier decision and reward attempt fail.
 6. Actual wallet transfer failure after deleting payer -> RefundRetryable -> recreate same payer -> permissionless retry succeeds; another retry fails.
 7. Actual reward transfer failure after deleting beneficiary -> PayRetryable -> recreate same beneficiary -> permissionless retry succeeds; another retry fails.
-8. Two simultaneously open cases settle independently, no pooled principal.
-9. Quiescent ledger: locked0, refund in-flight0, reserved rewards0, reward in-flight0, Buyback6NEAR, physical balance covers reserve+storage+buffer.
+8. Simultaneous Promise.all settlements with two Mock Goals and different verifier signers; no pooled principal.
+9. Deposit succeeds, late binding fails, on-chain orphan timeout refunds and prevents official binding.
+10. Quiescent ledger: locked0, refund in-flight0, reserved rewards0, reward in-flight0, Buyback6NEAR, physical balance covers reserve+storage+buffer.
 
 Unit coverage additionally includes exact timeout boundary, timeout-refund then confirmed Refunded then late slash rejected, slash before deadline then timeout rejected, stale/duplicate transfer callbacks, conflicting settlement/outcome, settlement-ID reuse across escrow, insufficient sponsored balance, insufficient gas, pending retry rejection, reward before final forfeiture/principal callback, zero/excess reward funding, duplicate funding, unauthorized cross-Goal payment, one Challenge per proof/case, immutable intent metadata, paused admission and disabled-Goal neutral exit, F0/caps/rounding and u128 maximum reference.
 
@@ -41,3 +42,5 @@ No unrelated tests of original Goal were modified or represented as new verifica
 Caller settlement namespaces bond:/reward: must stay separate from Treasury's deterministic internal timeout: marker (see ABI). Internal timeout labels are not entries in the caller settlement index; escrow outcome/state remains authoritative, so label reuse cannot re-settle that escrow. For Mock, composed IDs include textual case_id prefixes; use case_id<=121 UTF-8 bytes (prefer a fixed64-char case hash) so reward:<case> stays within Treasury128-byte limit. Treasury itself accepts128-byte case IDs; a real Goal should hash composed settlement IDs rather than append unbounded text. Oversized composed IDs reject settlement; original payer retains neutral timeout exit. These are integration constraints, not extra admin powers.
 
 Reward liveness limitation: initial pay_reward requires the owning authorized Goal. If it is unavailable or revoked while reward is still Funded, initial payment can wait indefinitely until Goal/admin coordination restores authorization. Permissionless retry covers already attempted failed payouts, not initial execution. Production policy must address this; there is no admin withdrawal escape hatch. Treasury does not persist raw F, only fixed validated B/R; real Goal must retain the immutable F snapshot.
+
+Additional focused real-sandbox suite evidence/bind-before-deposit.log: unpaid escrow fails on-chain verification -> BindRetryable, then actual deposit/bind and full refund succeed. Runner executes both suites. An optional earlier test with two large fast_forward calls stalled after the second call (evidence/sandbox-second-fast-forward-stall.log), not counted as passed. Final fixture uses one shared on-chain time advance for both timeout cases and passed all assertions.
