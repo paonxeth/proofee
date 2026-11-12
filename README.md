@@ -9,7 +9,8 @@ NEAR hackathon, track 11. Testnet only.
 ## How the contract works
 
 Full description: [docs/SPEC.md](docs/SPEC.md); decisions: [docs/DECISIONS.md](docs/DECISIONS.md);
-audit: [docs/AUDIT.md](docs/AUDIT.md).
+audit: [docs/AUDIT.md](docs/AUDIT.md); what is built and verified on testnet:
+[docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 In short:
 - `new` fixes the creator, the verifier, the goal spec hash (`goal_spec_hash`, sha256 of the file at
