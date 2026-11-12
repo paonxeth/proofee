@@ -1,0 +1,89 @@
+   Compiling mock-goal v0.2.0 (/workspace/contracts/mock_goal)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.34s
+     Running unittests src/lib.rs (target/debug/deps/bond_treasury-aa224e79fe2bca02)
+
+running 57 tests
+test tests::bad_economics - should panic ... ok
+test tests::arbitration_cannot_override_timeout_refund - should panic ... ok
+test tests::bound_timeout_even_if_goal_disabled ... ok
+test tests::conflict - should panic ... ok
+test tests::decision_conflict - should panic ... ok
+test tests::duplicate_deposit - should panic ... ok
+test tests::duplicate_goal - should panic ... ok
+test tests::economic_boundary_reference_only ... ok
+test tests::duplicate_funding - should panic ... ok
+test tests::excessive_reward - should panic ... ok
+test tests::failure_retry_stale_callback ... ok
+test tests::funded_reward_success_replay ... ok
+test tests::immutable_intent_payer - should panic ... ok
+test tests::late_arbitration_slash_rejected_at_boundary - should panic ... ok
+test tests::intent_replay ... ok
+test tests::low_gas - should panic ... ok
+test tests::late_decision - should panic ... ok
+test tests::no_late_bind - should panic ... ok
+test tests::one_challenger_per_proof - should panic ... ok
+test tests::one_escrow_per_case - should panic ... ok
+test tests::orphan_timeout ... ok
+test tests::other_goal_cannot_fund - should panic ... ok
+test tests::other_goal_cannot_pay - should panic ... ok
+test tests::outsider_bind - should panic ... ok
+test tests::outsider_intent - should panic ... ok
+test tests::outsider_decision - should panic ... ok
+test tests::outsider_pause - should panic ... ok
+test tests::outsider_register - should panic ... ok
+test tests::outsider_revoke - should panic ... ok
+test tests::pause_deposit - should panic ... ok
+test tests::pending_retry - should panic ... ok
+test tests::production_neutral_refund ... ok
+test tests::production_rejected_no_reward ... ok
+test tests::production_slash_needs_verdict - should panic ... ok
+test tests::production_valid_slash ... ok
+test tests::qualification_rejected_before_bind ... ok
+test tests::refund_success_and_replay ... ok
+test tests::reward_conflict_rejected - should panic ... ok
+test tests::reward_insolvency - should panic ... ok
+test tests::reward_failure_retry ... ok
+test tests::reward_requires_confirmed_refund - should panic ... ok
+test tests::reward_pending_retry_rejected - should panic ... ok
+test tests::signer_is_not_authority - should panic ... ok
+test tests::settlement_id_cannot_cross_escrows - should panic ... ok
+test tests::slash_isolation ... ok
+test tests::slash_unbound_rejected - should panic ... ok
+test tests::timeout_cannot_override_prior_slash - should panic ... ok
+test tests::timeout_cannot_repeat_pending_refund - should panic ... ok
+test tests::underfunded_deposit - should panic ... ok
+test tests::timeout_has_no_reward - should panic ... ok
+test tests::unfunded_reward - should panic ... ok
+test tests::view_contract_and_donation ... ok
+test tests::valid_proof_has_no_reward - should panic ... ok
+test tests::wrong_amount - should panic ... ok
+test tests::wrong_payer - should panic ... ok
+test tests::zero_storage_funding - should panic ... ok
+test tests::zero_reward_funding - should panic ... ok
+
+test result: ok. 57 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.19s
+
+     Running unittests src/lib.rs (target/debug/deps/mock_goal-84f0398203ca0303)
+
+running 18 tests
+test tests::duplicate_prepare - should panic ... ok
+test tests::decision_and_settlement_callbacks ... ok
+test tests::failed_verification ... ok
+test tests::funding_callback_and_replay ... ok
+test tests::funding_and_claim_routes ... ok
+test tests::neutral_not_rewardable - should panic ... ok
+test tests::qualification_and_bound_callback ... ok
+test tests::prepare_callback_retry ... ok
+test tests::recover_funding_callback ... ok
+test tests::refresh_reward_and_stale ... ok
+test tests::retry_and_view_routes ... ok
+test tests::refresh_timeout ... ok
+test tests::unauthorized_bind - should panic ... ok
+test tests::unauthorized_arbitrate - should panic ... ok
+test tests::unauthorized_mock_funding - should panic ... ok
+test tests::unauthorized_claim - should panic ... ok
+test tests::unauthorized_qualify - should panic ... ok
+test tests::unauthorized_prepare - should panic ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s
+

@@ -1,0 +1,15 @@
+# Bond Treasury v0.2.0
+
+See workspace README.md for pinned build, real sandbox runner and testnet deployment. Exact public interface: ABI.md; real Goal changes: INTEGRATION_HANDOFF.md; existing source review: GOAL_REVIEW.md. Root TEST_REPORT.md/evidence describe actual verification.
+
+Trust model: admin registers/disables trusted Goals and pauses new admission; no withdraw/rescue. Goal is predecessor-derived at intent registration and owns economic snapshot, fixed payer/proof/case/submission/deadlines and immutable final decision. Treasury validates exact integer economic limits, actual deposit/funding, state, deadlines, uniqueness and payout destination. It cannot independently audit Goal's claimed final forfeiture. Malicious authorized Goal can judge its own cases; it cannot spend another Goal's principal/reserves. Review Goal code before registration.
+
+Principal: unfunded intent -> Deposited -> Bound -> either Slashed OR RefundPending -> Refunded / RefundRetryable -> RefundPending. Qualification rejection may refund Deposited directly. Terminal outcome is assigned before transfer; timeout writes NeutralRefund. Timely final settlement can finish asynchronously after deadline, but no new settlement at/after timeout. Callback guard checks Pending+attempt, exactly one empty result; failure restores liability, success removes it. No blind pending retry.
+
+Reward: immutable final-invalid decision + accepted REFUND -> actual Goal funding<=registered cap -> Funded -> PayPending -> Paid/PayRetryable. Cannot pay before principal Refunded. Fixed original payer; one funding per escrow, one reward settlement. Same settlement replay no-op; failed transfer retries use separate permissionless API. Funding deposited twice is rejected; extra attachment is refunded by NEAR runtime. No funding for timeout, rejection or slash. Partial funding supported, no later topup.
+
+Separate accounting for locked bonds, pending refunds, reserved rewards, pending reward transfers, per-Goal Buyback and sponsored storage/buffer. Storage is never deducted from principal. Conservative admission check includes pending liabilities even if NEAR already debited: temporary rejection can require operator topup until callbacks; no pooling to cover a deficit. Quiescent balance must cover all remaining liabilities+storage+buffer. No storage cleanup and no state migration in this version.
+
+Source feature demo-registry is OFF in shipped WASM. It exposes the old admin-only demo registration only in explicitly nonproduction builds, zero rewards, fixed payer and same state/transfer safeguards. Default deploy cannot call it. Never register end-user cases via this test feature.
+
+No-key deploy gives no upgrade path; bugs require a separately reviewed new contract/migration, not administrator override of payouts. Lost callback can leave Pending indefinitely; inspect receipts instead of double-paying. Stable account-name custody matters: deleting/recreating payer changes the account controlling that name. Real Goal must define policies before public bonds. This is a Testnet prototype, not independently audited Mainnet software.
