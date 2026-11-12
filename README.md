@@ -37,6 +37,10 @@ on-chain by `goal_spec_hash`, the account has no keys.
   `claim` of 0.7 NEAR.
 - [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) — what is verified on testnet,
   implemented, simulated or planned.
+- Live page: [paonxeth.github.io/proofee/client/demo.html](https://paonxeth.github.io/proofee/client/demo.html)
+  — the goal, milestones, balances and the spec hash check, read from testnet in the browser.
+- [client/](client/) — framework-free TypeScript client for the frontend: reads a goal over
+  JSON-RPC and builds unsigned transactions for a wallet.
 
 ```sh
 near contract call-function as-read-only goal-4.proofee-anton.testnet get_goal \
