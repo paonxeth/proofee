@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400" viewBox="0 0 640 400" font-family="sans-serif">
+  <rect width="640" height="400" fill="#f4f4f5"/>
+  <rect x="0" y="0" width="640" height="48" fill="#18181b"/>
+  <text x="20" y="31" fill="#fafafa" font-size="18">ProoFee</text>
+  <rect x="500" y="12" width="120" height="24" rx="4" fill="#3f3f46"/>
+  <text x="514" y="29" fill="#fafafa" font-size="12">Connect wallet</text>
+  <text x="20" y="90" fill="#18181b" font-size="20">Ship ProoFee on NEAR testnet</text>
+  <rect x="20" y="115" width="600" height="60" rx="6" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="36" y="150" fill="#18181b" font-size="14">1. Goal Contract live on NEAR testnet — 15%</text>
+  <rect x="20" y="185" width="600" height="60" rx="6" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="36" y="220" fill="#18181b" font-size="14">2. Public web app connected to the contract — 25%</text>
+  <rect x="20" y="255" width="600" height="60" rx="6" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="36" y="290" fill="#18181b" font-size="14">3. Demo published on X — 40%</text>
+  <text x="20" y="360" fill="#a1a1aa" font-size="12">Mockup</text>
+</svg>
