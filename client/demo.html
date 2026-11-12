@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ProoFee goal demo</title>
+  <style>
+    :root { --fg: #18181b; --muted: #71717a; --line: #e4e4e7; --ok: #15803d; --bad: #b91c1c; --bg: #ffffff; }
+    @media (prefers-color-scheme: dark) {
+      :root { --fg: #f4f4f5; --muted: #a1a1aa; --line: #3f3f46; --ok: #4ade80; --bad: #f87171; --bg: #18181b; }
+    }
+    body { margin: 0 auto; max-width: 960px; padding: 24px 16px; font: 15px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    h2 { font-size: 17px; margin: 28px 0 8px; }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); font-weight: 600; }
+    .bad { color: var(--bad); font-weight: 600; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    code { font-size: 13px; word-break: break-all; }
+    .scroll { overflow-x: auto; }
+    a { color: inherit; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Loading…</h1>
+  <div class="muted" id="account"></div>
+  <div id="error" class="bad"></div>
+
+  <h2>Goal</h2>
+  <table id="params"></table>
+
+  <h2>Goal spec check</h2>
+  <div id="spec">Checking…</div>
+
+  <h2>Milestones</h2>
+  <div class="scroll"><table id="milestones"></table></div>
+
+  <h2>Balances (NEAR)</h2>
+  <table id="balances"></table>
+
+  <script type="module">
+    import {
+      DEMO_GOAL_ID, getGoal, getBalances, balancesToNear, immediateSharePct, milestoneSharePct, verifySpec,
+    } from "./dist/index.js";
+
+    // ?goal=<account> to show another goal, ?rpc=<url> for another endpoint.
+    const params = new URLSearchParams(location.search);
+    const goalId = params.get("goal") || DEMO_GOAL_ID;
+    const rpcUrl = params.get("rpc") || undefined;
+
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, text, cls) => {
+      const e = document.createElement(tag);
+      if (text !== undefined && text !== null) e.textContent = String(text);
+      if (cls) e.className = cls;
+      return e;
+    };
+    // On-chain strings are user input: text only, links only for http(s).
+    const link = (url, text) => {
+      if (!/^https?:\/\//.test(url ?? "")) return el("span", url || "—");
+      const a = el("a", text ?? url);
+      a.href = url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      return a;
+    };
+    const row = (cells, header = false) => {
+      const tr = el("tr");
+      for (const c of cells) {
+        const td = el(header ? "th" : "td");
+        if (c instanceof Node) td.append(c); else td.textContent = c ?? "—";
+        tr.append(td);
+      }
+      return tr;
+    };
+    const utc = (ms) => (ms ? new Date(ms).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "—");
+
+    async function main() {
+      const opts = { rpcUrl };
+      const [goal, balances] = await Promise.all([getGoal(goalId, opts), getBalances(goalId, opts)]);
+
+      $("title").textContent = goal.goal_title;
+      $("account").append("Contract ", link(`https://testnet.nearblocks.io/address/${goalId}`, goalId));
+
+      $("params").append(
+        row(["Creator", goal.creator]),
+        row(["Verifier", goal.verifier]),
+        row(["Immediate share", `${immediateSharePct(goal)}% of all fees`]),
+        row(["Challenge window", `${goal.challenge_window_ms / 1000} s`]),
+        row(["Goal spec", link(goal.goal_uri)]),
+      );
+
+      const ms = $("milestones");
+      ms.append(row(["#", "Milestone", "Share of all fees", "Status", "Deadline", "Proof", "Challenge"], true));
+      goal.milestones.forEach((m, i) => {
+        const challenge = m.challenger ? `${m.challenger}: ${m.challenge_reason ?? ""}` : "—";
+        const status = el("span", m.status,
+          m.status === "Accepted" ? "ok" : m.status === "Rejected" || m.status === "Failed" ? "bad" : "");
+        ms.append(row([String(i + 1), m.title, `${milestoneSharePct(m, goal.immediate_bps)}%`, status,
+          utc(m.deadline_ms), m.proof_uri ? link(m.proof_uri, "proof") : "—", challenge]));
+      });
+
+      const b = balancesToNear(balances);
+      const bt = $("balances");
+      for (const key of ["total_received", "immediate", "locked", "unlocked", "forfeited", "pending",
+                         "claimed", "claimable", "unsynced"]) {
+        const tr = row([key, b[key]]);
+        tr.lastChild.className = "num";
+        bt.append(tr);
+      }
+
+      const spec = await verifySpec(goal);
+      const box = $("spec");
+      box.textContent = "";
+      box.append(
+        el("div", spec.ok ? "✓ sha256 of the file at goal_uri matches goal_spec_hash"
+                          : `✗ does not match${spec.error ? ` (${spec.error})` : ""}`, spec.ok ? "ok" : "bad"),
+        el("div", "on-chain: "), el("div", "file:     "),
+      );
+      box.children[1].append(el("code", spec.expected));
+      box.children[2].append(el("code", spec.actual ?? "—"));
+      document.body.dataset.ready = "true";
+    }
+
+    main().catch((e) => {
+      $("error").textContent = String(e);
+      document.body.dataset.ready = "error";
+    });
+  </script>
+</body>
+</html>
