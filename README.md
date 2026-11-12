@@ -27,13 +27,27 @@ In short:
 
 ## Demo goal
 
-[`goal-3.proofee-anton.testnet`](https://testnet.nearblocks.io/address/goal-3.proofee-anton.testnet)
-— 2-minute challenge window, three milestones 40/30/30, the account has no keys.
+[`goal-4.proofee-anton.testnet`](https://testnet.nearblocks.io/address/goal-4.proofee-anton.testnet)
+— "Ship ProoFee on NEAR testnet": 20% immediate, three milestones of 15/25/40% of all fees,
+2-minute challenge window, the goal spec ([`specs/demo-goal.json`](specs/demo-goal.json)) pinned
+on-chain by `goal_spec_hash`, the account has no keys.
+
+- [docs/DEMO_RUN.md](docs/DEMO_RUN.md) — both demo scenarios run on this goal, every step with
+  its transaction: milestone 1 accepted after the window, milestone 2 challenged and rejected,
+  `claim` of 0.7 NEAR.
+- [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md) — what is verified on testnet,
+  implemented, simulated or planned.
 
 ```sh
-near contract call-function as-read-only goal-3.proofee-anton.testnet get_balances \
+near contract call-function as-read-only goal-4.proofee-anton.testnet get_goal \
+  json-args '{}' network-config testnet now
+near contract call-function as-read-only goal-4.proofee-anton.testnet get_balances \
   json-args '{}' network-config testnet now
 ```
+
+The previous contract version is deployed at
+[`goal-3.proofee-anton.testnet`](https://testnet.nearblocks.io/address/goal-3.proofee-anton.testnet)
+(50% immediate, milestones 40/30/30, no `goal_spec_hash`, the verifier could still challenge).
 
 ## Tests
 

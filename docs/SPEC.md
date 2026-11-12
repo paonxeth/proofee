@@ -261,6 +261,15 @@ Integration test (`near-sandbox` + `near-api`, sandbox):
 
 ## 11. Testnet demo scenario
 
+Main demo goal: [`goal-4.proofee-anton.testnet`](https://testnet.nearblocks.io/address/goal-4.proofee-anton.testnet),
+deployed with `scripts/deploy-testnet.sh scripts/goals/demo.json`. The recorded run with every
+transaction is in [DEMO_RUN.md](DEMO_RUN.md); what is verified on testnet is in
+[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). The recorded run used 2 NEAR of fees instead
+of 1 (amounts double: claimable 0.4 → 0.7, forfeited 0.5, `claim` 0.7), added the failing checks
+(`challenge` by the verifier, `resolve` by a third party, a second `claim`) and skipped step 7.
+`goal-3.proofee-anton.testnet` is the previous contract version (50% immediate, 40/30/30,
+no `goal_spec_hash`).
+
 Check near-cli-rs syntax against `near --help`.
 
 1. Deploy a goal (`scripts/goals/demo.json`): immediate 2000 (20%), window 120000 ms, three
