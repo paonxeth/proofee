@@ -1,0 +1,50 @@
+   Compiling locker v0.1.0 (/workspace/work/proofee/launcher/contracts/locker)
+warning: use of deprecated function `near_sdk::env::promise_result`: use `promise_result_checked` to prevent out-of-gas errors
+  --> src/lib.rs:50:16
+   |
+50 |     match env::promise_result(0) {
+   |                ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated function `near_sdk::env::promise_result`: use `promise_result_checked` to prevent out-of-gas errors
+  --> src/lib.rs:55:40
+   |
+55 | fn succeeded() -> bool { matches!(env::promise_result(0), PromiseResult::Successful(_)) }
+   |                                        ^^^^^^^^^^^^^^
+
+warning: unused `near_sdk::Promise` that must be used
+   --> src/lib.rs:332:49
+    |
+332 |         let mut c=setup(); c.phase=Phase::Busy; c.collect();
+    |                                                 ^^^^^^^^^^^
+    |
+    = note: return or detach explicitly via `.detach()`
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+332 |         let mut c=setup(); c.phase=Phase::Busy; let _ = c.collect();
+    |                                                 +++++++
+
+warning: `locker` (lib test) generated 3 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.51s
+     Running unittests src/lib.rs (work/proofee/launcher/contracts/locker/target/debug/build/locker/a1820cf5226f2d2f/out/locker-a1820cf5226f2d2f)
+
+running 14 tests
+test tests::collect_receipt_cannot_remove_principal ... ok
+test tests::ambiguous_withdraw_freezes ... ok
+test tests::concurrent_collect_rejected - should panic ... ok
+test tests::conversion_uses_actual_wnear_balance_delta ... ok
+test tests::failed_payment_keeps_exact_debt ... ok
+test tests::failed_seed_can_only_retry_after_full_refund ... ok
+test tests::fixed_supply_and_recipient ... ok
+test tests::position_owner_and_pool_checked ... ok
+test tests::native_only_swap_result_does_not_get_mislabelled_as_wnear ... ok
+test tests::rejects_mainnet - should panic ... ok
+test tests::principal_dust_is_never_counted_as_fees ... ok
+test tests::rejects_overlapping_range - should panic ... ok
+test tests::unwrap_accounts_exact_wnear_amount_not_native_reward_or_reserve ... ok
+test tests::zero_collect_is_no_income ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+

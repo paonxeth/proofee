@@ -1,0 +1,53 @@
+{
+  "before": {
+    "creator_id": "pf-launch-mwdyyhj0.testnet",
+    "goal_id": "goal-e2e1.pf-launch-mwdyyhj0.testnet",
+    "token_id": "token-e2e1.pf-launch-mwdyyhj0.testnet",
+    "pool_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000",
+    "lpt_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000#2583",
+    "supply": "1000000000000000000000000000",
+    "phase": "Active",
+    "pending": null,
+    "principal_liquidity": "4057331146356777986151",
+    "dust_x": "120320",
+    "dust_y": "0",
+    "fee_x": "0",
+    "fee_y": "0",
+    "swapped_wnear": "0",
+    "native_due": "0",
+    "native_paid": "1191987982122365775599",
+    "last_error": null
+  },
+  "fees_before": {
+    "lpt_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000#2583",
+    "owner_id": "lock-e2e1.pf-launch-mwdyyhj0.testnet",
+    "pool_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000",
+    "left_point": -69200,
+    "right_point": -59400,
+    "amount": "4057331146356777986151",
+    "mft_id": "",
+    "v_liquidity": "0",
+    "unclaimed_fee_x": "3086302851637726980579",
+    "unclaimed_fee_y": "0"
+  },
+  "after": {
+    "creator_id": "pf-launch-mwdyyhj0.testnet",
+    "goal_id": "goal-e2e1.pf-launch-mwdyyhj0.testnet",
+    "token_id": "token-e2e1.pf-launch-mwdyyhj0.testnet",
+    "pool_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000",
+    "lpt_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000#2583",
+    "supply": "1000000000000000000000000000",
+    "phase": "Active",
+    "pending": null,
+    "principal_liquidity": "4057331146356777986151",
+    "dust_x": "120320",
+    "dust_y": "0",
+    "fee_x": "0",
+    "fee_y": "0",
+    "swapped_wnear": "0",
+    "native_due": "0",
+    "native_paid": "1195123276034578613696",
+    "last_error": null
+  },
+  "reason": "Fee conversion itself accrues fresh LP fees; verify cycle withdrawals rather than expecting zero."
+}

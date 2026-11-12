@@ -1,0 +1,233 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "wnear",
+    "version": "poc-2026-11-12",
+    "authors": []
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "near_deposit",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": []
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {}
+        }
+      },
+      {
+        "name": "near_withdraw",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {}
+        }
+      },
+      {
+        "name": "ft_balance_of",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          }
+        }
+      },
+      {
+        "name": "ft_transfer",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "receiver_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            },
+            {
+              "name": "memo",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {}
+        }
+      },
+      {
+        "name": "ft_transfer_call",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "receiver_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            },
+            {
+              "name": "msg",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "memo",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          }
+        }
+      },
+      {
+        "name": "storage_balance_bounds",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": []
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "storage_deposit",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "registration_only",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {}
+    }
+  },
+  "_provenance": {
+    "scope": "Tested wrap.testnet integration subset",
+    "warning": "Handwritten minimal integration ABI. Not an extracted complete on-chain ABI; unspecified return schemas deliberately remain open. See transaction evidence for execution."
+  }
+}

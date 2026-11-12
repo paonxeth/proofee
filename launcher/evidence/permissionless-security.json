@@ -1,0 +1,11 @@
+{
+  "caller": "caller.pf-launch-mwdyyhj0.testnet",
+  "creator": "pf-launch-mwdyyhj0.testnet",
+  "goal": "goal-e2e1.pf-launch-mwdyyhj0.testnet",
+  "goal_unchanged": true,
+  "unexpected_receiver_ignored": true,
+  "caller_before": "600000000000000000000000",
+  "caller_after": "591737797125008500000000",
+  "native_paid_before": "1195123276034578613696",
+  "native_paid_after": "1195148358385876316400"
+}

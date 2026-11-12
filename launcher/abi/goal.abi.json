@@ -1,0 +1,513 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "goal",
+    "version": "0.1.0",
+    "build": {
+      "compiler": "rustc 1.100.0",
+      "builder": "cargo-near cargo-near-build 0.11.5"
+    },
+    "wasm_hash": "C7XJPm1bVJ631wDsUkqTV4ENwoJFyvYwY9jZ1tFvLHTF"
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "challenge",
+        "doc": " Submitted → Challenged. Anyone except the creator and the verifier, while the window is open.\n The verifier would be judging their own challenge (AUDIT M-3).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "index",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "reason",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "claim",
+        "doc": " Pays the creator everything claimable (SPEC 5.3).",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
+          }
+        }
+      },
+      {
+        "name": "contract_source_metadata",
+        "kind": "view"
+      },
+      {
+        "name": "deposit",
+        "doc": " Accepts NEAR. The deposit is already in the balance when the call starts; `sync` counts it as income.",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ]
+      },
+      {
+        "name": "expire",
+        "doc": " Pending → Failed. Anyone, after the deadline.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "index",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "finalize",
+        "doc": " Submitted → Accepted. Anyone, after the challenge window. The deadline does not matter: the proof was submitted in time.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "index",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "get_balances",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/BalancesView"
+          }
+        }
+      },
+      {
+        "name": "get_goal",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/GoalView"
+          }
+        }
+      },
+      {
+        "name": "new",
+        "kind": "call",
+        "modifiers": [
+          "init"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "creator",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "verifier",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "goal_title",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "goal_uri",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "goal_spec_hash",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "immediate_bps",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint16",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "challenge_window_ms",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "milestones",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/MilestoneInput"
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "on_claim_transfer",
+        "doc": " Result of the transfer from `claim`. Rolls the counters back on failure.\n There are no checks here that can fail: a failed callback would leave the payout\n flag set forever.",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "resolve",
+        "doc": " Challenged → Accepted / Rejected. Verifier only, within 24 h of the challenge.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "index",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "accept",
+              "type_schema": {
+                "type": "boolean"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "resolve_timeout",
+        "doc": " Challenged → Accepted. Anyone, if the verifier has not resolved the dispute within 24 h (AUDIT M-1).",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "index",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "set_token",
+        "doc": " Token address, informational only. Set by the creator, once.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "token",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "submit_proof",
+        "doc": " Pending → Submitted. Creator only, before the milestone deadline.",
+        "kind": "call",
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "index",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "proof_uri",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "proof_hash",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "sync",
+        "doc": " Anything above `last_balance` is new income (SPEC 5.1).\n `last_balance` never decreases, and while a payout is in flight sync is skipped,\n so the refund of a failed payout is never counted as income.",
+        "kind": "call"
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string",
+      "definitions": {
+        "BalancesView": {
+          "description": "`get_balances` response. Formulas: SPEC 5.2; amounts in yoctoNEAR (strings in JSON).",
+          "type": "object",
+          "required": [
+            "claimable",
+            "claimed",
+            "forfeited",
+            "immediate",
+            "locked",
+            "pending",
+            "total_received",
+            "unlocked",
+            "unsynced"
+          ],
+          "properties": {
+            "claimable": {
+              "type": "string"
+            },
+            "claimed": {
+              "type": "string"
+            },
+            "forfeited": {
+              "type": "string"
+            },
+            "immediate": {
+              "type": "string"
+            },
+            "locked": {
+              "type": "string"
+            },
+            "pending": {
+              "type": "string"
+            },
+            "total_received": {
+              "type": "string"
+            },
+            "unlocked": {
+              "type": "string"
+            },
+            "unsynced": {
+              "description": "Received by the account but not yet counted by `sync`.",
+              "type": "string"
+            }
+          }
+        },
+        "GoalView": {
+          "description": "`get_goal` response: goal parameters and milestones. Money is in `get_balances`.",
+          "type": "object",
+          "required": [
+            "challenge_window_ms",
+            "creator",
+            "goal_spec_hash",
+            "goal_title",
+            "goal_uri",
+            "immediate_bps",
+            "milestones",
+            "verifier"
+          ],
+          "properties": {
+            "challenge_window_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "creator": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            },
+            "goal_spec_hash": {
+              "type": "string"
+            },
+            "goal_title": {
+              "type": "string"
+            },
+            "goal_uri": {
+              "type": "string"
+            },
+            "immediate_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            },
+            "milestones": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Milestone"
+              }
+            },
+            "token": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verifier": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": "string"
+            }
+          }
+        },
+        "Milestone": {
+          "type": "object",
+          "required": [
+            "deadline_ms",
+            "status",
+            "title",
+            "weight_bps"
+          ],
+          "properties": {
+            "challenge_reason": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "challenged_at_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "challenger": {
+              "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "deadline_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "proof_hash": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "proof_uri": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "$ref": "#/definitions/MilestoneStatus"
+            },
+            "submitted_at_ms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "title": {
+              "type": "string"
+            },
+            "weight_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        },
+        "MilestoneInput": {
+          "description": "A milestone as passed to `new`.",
+          "type": "object",
+          "required": [
+            "deadline_ms",
+            "title",
+            "weight_bps"
+          ],
+          "properties": {
+            "deadline_ms": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0.0
+            },
+            "title": {
+              "type": "string"
+            },
+            "weight_bps": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0.0
+            }
+          }
+        },
+        "MilestoneStatus": {
+          "type": "string",
+          "enum": [
+            "Pending",
+            "Submitted",
+            "Challenged",
+            "Accepted",
+            "Rejected",
+            "Failed"
+          ]
+        },
+        "Promise": true
+      }
+    }
+  }
+}
