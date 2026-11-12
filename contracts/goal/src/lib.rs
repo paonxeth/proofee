@@ -12,7 +12,7 @@ const MAX_MILESTONES: usize = 5;
 const MAX_TITLE_LEN: usize = 100;
 const MAX_URI_LEN: usize = 256;
 const MAX_REASON_LEN: usize = 280;
-const PROOF_HASH_LEN: usize = 64;
+const SHA256_HEX_LEN: usize = 64;
 const CALLBACK_GAS: Gas = Gas::from_tgas(10);
 const DAY_MS: u64 = 86_400_000;
 /// Challenge window: at least a minute (otherwise nobody can challenge in time) and at most 30 days.
@@ -68,6 +68,7 @@ pub struct GoalView {
     pub token: Option<AccountId>,
     pub goal_title: String,
     pub goal_uri: String,
+    pub goal_spec_hash: String,
     pub immediate_bps: u16,
     pub challenge_window_ms: u64,
     pub milestones: Vec<Milestone>,
@@ -96,6 +97,8 @@ pub struct Goal {
     token: Option<AccountId>,
     goal_title: String,
     goal_uri: String,
+    /// sha256 of the goal spec file at `goal_uri`.
+    goal_spec_hash: String,
     immediate_bps: u16,
     challenge_window_ms: u64,
     milestones: Vec<Milestone>,
@@ -110,9 +113,9 @@ fn title_ok(title: &str) -> bool {
     (1..=MAX_TITLE_LEN).contains(&title.chars().count())
 }
 
-/// sha256 in hex: exactly 64 characters `0-9a-f`.
-fn is_valid_proof_hash(hash: &str) -> bool {
-    hash.len() == PROOF_HASH_LEN
+/// sha256 in hex: exactly 64 characters `0-9a-f`. Used for `proof_hash` and `goal_spec_hash`.
+fn is_sha256_hex(hash: &str) -> bool {
+    hash.len() == SHA256_HEX_LEN
         && hash
             .bytes()
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
@@ -150,6 +153,7 @@ impl Goal {
         verifier: AccountId,
         goal_title: String,
         goal_uri: String,
+        goal_spec_hash: String,
         immediate_bps: u16,
         challenge_window_ms: u64,
         milestones: Vec<MilestoneInput>,
@@ -161,6 +165,7 @@ impl Goal {
         require!(verifier != this, "Verifier cannot be the contract");
         require!(title_ok(&goal_title), "Goal title must be 1-100 chars");
         require!(goal_uri.chars().count() <= MAX_URI_LEN, "URI too long");
+        require!(is_sha256_hex(&goal_spec_hash), "Invalid goal spec hash");
         require!(
             immediate_bps <= BPS_DENOMINATOR,
             "immediate_bps must be <= 10000"
@@ -222,7 +227,12 @@ impl Goal {
 
         events::emit(
             "goal_created",
-            json!({ "creator": creator, "verifier": verifier, "milestones": milestones.len() }),
+            json!({
+                "creator": creator,
+                "verifier": verifier,
+                "milestones": milestones.len(),
+                "goal_spec_hash": goal_spec_hash,
+            }),
         );
 
         Self {
@@ -231,6 +241,7 @@ impl Goal {
             token: None,
             goal_title,
             goal_uri,
+            goal_spec_hash,
             immediate_bps,
             challenge_window_ms,
             milestones,
@@ -294,7 +305,7 @@ impl Goal {
         require!(m.status == MilestoneStatus::Pending, "Wrong status");
         require!(now_ms < m.deadline_ms, "Deadline passed");
         require!(proof_uri.chars().count() <= MAX_URI_LEN, "URI too long");
-        require!(is_valid_proof_hash(&proof_hash), "Invalid proof hash");
+        require!(is_sha256_hex(&proof_hash), "Invalid proof hash");
 
         m.status = MilestoneStatus::Submitted;
         m.proof_uri = Some(proof_uri.clone());
@@ -474,6 +485,7 @@ impl Goal {
             token: self.token.clone(),
             goal_title: self.goal_title.clone(),
             goal_uri: self.goal_uri.clone(),
+            goal_spec_hash: self.goal_spec_hash.clone(),
             immediate_bps: self.immediate_bps,
             challenge_window_ms: self.challenge_window_ms,
             milestones: self.milestones.clone(),
@@ -589,12 +601,16 @@ mod tests {
             .collect()
     }
 
+    // sha256 of "spec".
+    const SPEC_HASH: &str = "d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19";
+
     fn new_goal(verifier: AccountId, milestones: Vec<MilestoneInput>) -> Goal {
         Goal::new(
             creator(),
             verifier,
             "Ship the app".to_string(),
             "https://proofee.example/goal".to_string(),
+            SPEC_HASH.to_string(),
             5000,
             120_000,
             milestones,
@@ -614,6 +630,7 @@ mod tests {
             verifier(),
             goal_title.to_string(),
             goal_uri.to_string(),
+            SPEC_HASH.to_string(),
             immediate_bps,
             challenge_window_ms,
             milestones,
@@ -805,6 +822,7 @@ mod tests {
             verifier(),
             "Goal".to_string(),
             String::new(),
+            SPEC_HASH.to_string(),
             5000,
             120_000,
             milestones(&[4000, 3000, 3000]),
@@ -839,8 +857,37 @@ mod tests {
         assert_eq!(logs.len(), 1);
         assert_eq!(
             logs[0],
-            r#"EVENT_JSON:{"standard":"proofee","version":"1.0.0","event":"goal_created","data":[{"creator":"creator.testnet","verifier":"verifier.testnet","milestones":3}]}"#
+            r#"EVENT_JSON:{"standard":"proofee","version":"1.0.0","event":"goal_created","data":[{"creator":"creator.testnet","verifier":"verifier.testnet","milestones":3,"goal_spec_hash":"d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19"}]}"#
         );
+    }
+
+    #[test]
+    fn new_checks_goal_spec_hash() {
+        let bad = [
+            String::new(),                    // empty
+            SPEC_HASH.to_uppercase(),         // upper case
+            SPEC_HASH[..63].to_string(),      // 63 characters
+            format!("{}g", &SPEC_HASH[..63]), // not hex
+            format!("{SPEC_HASH}0"),          // 65 characters
+        ];
+        for hash in bad {
+            set_context(creator());
+            let result = std::panic::catch_unwind(|| {
+                Goal::new(
+                    creator(),
+                    verifier(),
+                    "Goal".to_string(),
+                    String::new(),
+                    hash.clone(),
+                    5000,
+                    120_000,
+                    milestones(&[4000, 3000, 3000]),
+                )
+            });
+            let err = result.err().unwrap_or_else(|| panic!("hash {hash:?} must be rejected"));
+            let msg = err.downcast_ref::<String>().map(String::as_str).unwrap_or("");
+            assert!(msg.contains("Invalid goal spec hash"), "{hash:?}: {msg}");
+        }
     }
 
     #[test]
@@ -856,6 +903,7 @@ mod tests {
         assert_eq!(view.creator, creator());
         assert_eq!(view.verifier, verifier());
         assert_eq!(view.token, None);
+        assert_eq!(view.goal_spec_hash, SPEC_HASH);
         assert_eq!(view.immediate_bps, 5000);
         assert_eq!(view.challenge_window_ms, 120_000);
         assert_eq!(view.milestones.len(), 3);

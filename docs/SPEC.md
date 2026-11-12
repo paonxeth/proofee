@@ -31,7 +31,8 @@ fees as plain transfers (verified on mainnet with launch #3680).
 | `creator` | AccountId | differs from `verifier` and from the contract address | creator account |
 | `verifier` | AccountId | differs from the contract address | team account |
 | `goal_title` | String | 1–100 characters | |
-| `goal_uri` | String | up to 256 characters | link to the goal description |
+| `goal_uri` | String | up to 256 characters | link to the goal spec file (immutable: a raw link pinned to a commit) |
+| `goal_spec_hash` | String | sha256 of the goal spec file, exactly 64 lowercase hex characters (as `proof_hash`) | |
 | `immediate_bps` | u16 | ≤ 10000 | 5000 (50%) |
 | `challenge_window_ms` | u64 | from 60000 (1 min) to 2592000000 (30 days) inclusive | 120000 (2 minutes); default 86400000 (24 h) |
 | `milestones` | Vec<MilestoneInput> | 3–5 milestones, each with `weight_bps` > 0, weights sum to 10000, `deadline_ms` > current time and ≤ current time + 31536000000 (365 days), `title` 1–100 characters | |
@@ -54,6 +55,7 @@ pub struct Goal {
     token: Option<AccountId>,      // informational only, set once
     goal_title: String,
     goal_uri: String,
+    goal_spec_hash: String,        // sha256 of the file at goal_uri, 64 lowercase hex characters
     immediate_bps: u16,
     challenge_window_ms: u64,
     milestones: Vec<Milestone>,
@@ -165,7 +167,7 @@ Milestone 3 pending: 15. The creator already claimed 30 → claimable 50 + 20 �
 ```rust
 #[init]
 pub fn new(creator: AccountId, verifier: AccountId, goal_title: String, goal_uri: String,
-           immediate_bps: u16, challenge_window_ms: u64,
+           goal_spec_hash: String, immediate_bps: u16, challenge_window_ms: u64,
            milestones: Vec<MilestoneInput>) -> Self
 
 pub fn set_token(&mut self, token: AccountId)                  // creator, once
@@ -181,7 +183,7 @@ pub fn claim(&mut self) -> Promise                              // creator
 #[private] pub fn on_claim_transfer(&mut self, amount: NearToken)
 
 // view
-pub fn get_goal(&self) -> GoalView          // parameters, milestones, statuses
+pub fn get_goal(&self) -> GoalView          // parameters, goal_spec_hash, milestones, statuses
 pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked, unlocked,
                                             // forfeited, pending, claimed, claimable,
                                             // unsynced = account_balance − last_balance
@@ -192,7 +194,7 @@ pub fn get_balances(&self) -> BalancesView  // total_received, immediate, locked
 - There is not and will never be a method that changes the creator, verifier, weights, `immediate_bps` or the window.
 
 String limits: `goal_title` and milestone `title` ≤ 100, `goal_uri` and `proof_uri` ≤ 256,
-`reason` ≤ 280, `proof_hash` exactly 64 hex characters.
+`reason` ≤ 280, `proof_hash` and `goal_spec_hash` exactly 64 lowercase hex characters.
 
 Error messages are short and clear: `"Only creator"`, `"Only verifier"`,
 `"Wrong status"`, `"Deadline passed"`, `"Window closed"`, `"Window still open"`,
@@ -204,6 +206,7 @@ Error messages are short and clear: `"Only creator"`, `"Only verifier"`,
 `new` validation and internal errors: `"Creator and verifier must differ"`,
 `"Creator cannot be the contract"`, `"Verifier cannot be the contract"`,
 `"Goal title must be 1-100 chars"`, `"Milestone title must be 1-100 chars"`, `"URI too long"`,
+`"Invalid goal spec hash"`,
 `"immediate_bps must be <= 10000"`, `"Window too short"`, `"Window too long"`,
 `"Need 3-5 milestones"`, `"Weight must be > 0"`, `"Deadline must be in future"`,
 `"Deadline too far"`, `"Deposit too small for storage"`, `"Token already set"`, `"Math overflow"`, `"No submission time"`.
@@ -214,7 +217,7 @@ Format: `EVENT_JSON:{"standard":"proofee","version":"1.0.0","event":"<name>","da
 
 | Event | Data |
 | --- | --- |
-| `goal_created` | creator, verifier, milestones (count) |
+| `goal_created` | creator, verifier, milestones (count), goal_spec_hash |
 | `fees_synced` | income, total_received |
 | `proof_submitted` | index, proof_uri, proof_hash |
 | `proof_challenged` | index, challenger, reason |

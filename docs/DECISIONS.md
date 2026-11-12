@@ -33,6 +33,8 @@
 ## 2026-11-12
 
 - Hackathon plan from the team: 3–5 milestones per goal (was 1–5).
+- The goal spec (milestones, acceptance criteria, evidence) is a JSON file in the repo. `new` takes
+  its sha256 as `goal_spec_hash`; `goal_uri` is a raw GitHub link pinned to a commit.
 
 ## Open
 

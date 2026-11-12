@@ -17,6 +17,7 @@ const DAY_MS: u64 = 86_400_000;
 // Measured in the sandbox: about 300 ms per block, 3000 blocks ≈ 15 min > window.
 const FAST_FORWARD_BLOCKS: u64 = 3_000;
 const PROOF_HASH: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const SPEC_HASH: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 fn near(n: u128) -> u128 {
     NearToken::from_near(n).as_yoctonear()
@@ -79,6 +80,7 @@ async fn setup() -> TestResult<Env> {
         "verifier": verifier.id,
         "goal_title": "Integration goal",
         "goal_uri": "",
+        "goal_spec_hash": SPEC_HASH,
         "immediate_bps": 5000,
         "challenge_window_ms": WINDOW_MS,
         "milestones": [
@@ -290,6 +292,7 @@ async fn new_requires_storage_deposit() -> TestResult {
         "verifier": env.stranger.id,
         "goal_title": long,
         "goal_uri": "𝕏".repeat(256),
+        "goal_spec_hash": SPEC_HASH,
         "immediate_bps": 5000,
         "challenge_window_ms": WINDOW_MS,
         "milestones": milestones,
