@@ -17,7 +17,7 @@ In short:
   3–5 milestones with weights and deadlines. There are no admin methods and no parameter changes.
 - Any NEAR received above the accounted balance is income. `sync` counts it.
 - A milestone: `submit_proof` (creator) → challenge window → `finalize` (anyone) or
-  `challenge` (anyone except the creator) → `resolve` (verifier). If the verifier has not resolved
+  `challenge` (anyone except the creator and the verifier) → `resolve` (verifier). If the verifier has not resolved
   the dispute within 24 h, anyone calls `resolve_timeout`, and the milestone is accepted for the creator. A
   milestone not submitted before its deadline is closed with `expire`.
 - An accepted milestone's share becomes claimable by the creator; a rejected or expired milestone's
@@ -64,8 +64,8 @@ Details: the "Fix status" section in [docs/AUDIT.md](docs/AUDIT.md).
 - **Do not send tokens (NEP-141) to a goal, including the memecoin itself and wNEAR.** The contract accounts
   for NEAR only. `ft_transfer` to a goal is an irreversible loss; `ft_transfer_call` fails and the
   tokens are returned.
-- The verifier can challenge a milestone themselves and reject it. There is no protection; this needs a multisig or DAO
-  and a challenge bond (M-3).
+- The verifier cannot challenge from their own account, but can from a second one and then reject
+  the milestone. Real protection needs a multisig or DAO verifier and a challenge bond (M-3).
 - If the creator deletes their top-level account, someone else can take the name and
   claim the claimable amount (L-5).
 - In the demo the creator and the verifier belong to the same person: the verifier is a

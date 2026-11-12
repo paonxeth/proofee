@@ -147,7 +147,7 @@ Milestone 3 pending: 15. The creator already claimed 30 → claimable 50 + 20 �
 | Transition | Method | Who | Condition |
 | --- | --- | --- | --- |
 | Pending → Submitted | `submit_proof` | `creator` only | `now < deadline_ms` |
-| Submitted → Challenged | `challenge` | anyone except `creator` | `now < submitted_at_ms + challenge_window_ms` |
+| Submitted → Challenged | `challenge` | anyone except `creator` and `verifier` | `now < submitted_at_ms + challenge_window_ms` |
 | Submitted → Accepted | `finalize` | anyone | `now ≥ submitted_at_ms + challenge_window_ms` |
 | Challenged → Accepted / Rejected | `resolve` | `verifier` only | `now < challenged_at_ms + RESOLVE_TIMEOUT_MS` |
 | Challenged → Accepted | `resolve_timeout` | anyone | `now ≥ challenged_at_ms + RESOLVE_TIMEOUT_MS` |
@@ -174,7 +174,7 @@ pub fn set_token(&mut self, token: AccountId)                  // creator, once
 #[payable] pub fn deposit(&mut self)                            // anyone, then sync
 pub fn sync(&mut self)                                          // anyone
 pub fn submit_proof(&mut self, index: u8, proof_uri: String, proof_hash: String) // creator
-pub fn challenge(&mut self, index: u8, reason: String)          // anyone except creator
+pub fn challenge(&mut self, index: u8, reason: String)          // anyone except creator and verifier
 pub fn finalize(&mut self, index: u8)                           // anyone
 pub fn resolve(&mut self, index: u8, accept: bool)              // verifier
 pub fn resolve_timeout(&mut self, index: u8)                    // anyone
@@ -199,7 +199,8 @@ String limits: `goal_title` and milestone `title` ≤ 100, `goal_uri` and `proof
 Error messages are short and clear: `"Only creator"`, `"Only verifier"`,
 `"Wrong status"`, `"Deadline passed"`, `"Window closed"`, `"Window still open"`,
 `"Nothing to claim"`, `"Weights must sum to 10000"`, `"No such milestone"`,
-`"Invalid proof hash"`, `"Creator cannot challenge"`, `"Reason too long"`,
+`"Invalid proof hash"`, `"Creator cannot challenge"`, `"Verifier cannot challenge"`,
+`"Reason too long"`,
 `"Deadline not passed"`, `"Payout in progress"`, `"Resolve time passed"`,
 `"Resolve time not passed"`.
 
@@ -244,7 +245,7 @@ Unit tests (`near-sdk` with `VMContextBuilder`):
 3. `sync` counts an incoming transfer as income, but not the initial deposit.
 4. The split into immediate and locked matches the formula (the example from 5.2).
 5. `submit_proof`: creator only, only from Pending, only before the deadline, the hash is validated.
-6. `challenge`: only while the window is open, not from the creator.
+6. `challenge`: only while the window is open, not from the creator or the verifier.
 7. `finalize` after the window → Accepted, the right amount is unlocked.
 8. `resolve`: verifier only; a rejection forfeits the milestone's share, including from future fees.
 9. `expire` after the deadline → Failed.

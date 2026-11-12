@@ -317,11 +317,13 @@ impl Goal {
         );
     }
 
-    /// Submitted → Challenged. Anyone except the creator, while the challenge window is open.
+    /// Submitted → Challenged. Anyone except the creator and the verifier, while the window is open.
+    /// The verifier would be judging their own challenge (AUDIT M-3).
     pub fn challenge(&mut self, index: u8, reason: String) {
         self.check_index(index);
         let challenger = env::predecessor_account_id();
         require!(challenger != self.creator, "Creator cannot challenge");
+        require!(challenger != self.verifier, "Verifier cannot challenge");
         let now_ms = env::block_timestamp_ms();
         let window_ms = self.challenge_window_ms;
         let m = &mut self.milestones[usize::from(index)];
@@ -559,6 +561,10 @@ mod tests {
 
     fn stranger() -> AccountId {
         "stranger.testnet".parse().unwrap()
+    }
+
+    fn other() -> AccountId {
+        "other.testnet".parse().unwrap()
     }
 
     /// Context: `predecessor` calls at NOW_MS, the contract balance is 5 NEAR.
@@ -1126,6 +1132,16 @@ mod tests {
         goal.challenge(0, "self".to_string());
     }
 
+    // AUDIT M-3: the verifier would challenge and then reject the milestone themselves.
+    #[test]
+    #[should_panic(expected = "Verifier cannot challenge")]
+    fn challenge_rejects_verifier() {
+        let mut goal = goal3();
+        submit_at(&mut goal, 0, NOW_MS);
+        set_time(verifier(), NOW_MS + 1);
+        goal.challenge(0, "self-dealing".to_string());
+    }
+
     #[test]
     #[should_panic(expected = "Window closed")]
     fn challenge_rejects_after_window() {
@@ -1150,7 +1166,7 @@ mod tests {
         submit_at(&mut goal, 0, NOW_MS);
         set_time(stranger(), NOW_MS + 1);
         goal.challenge(0, "first".to_string());
-        set_time(verifier(), NOW_MS + 2);
+        set_time(other(), NOW_MS + 2);
         goal.challenge(0, "second".to_string());
     }
 
