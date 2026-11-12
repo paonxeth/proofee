@@ -1,0 +1,42 @@
+{
+  "network": "testnet",
+  "contracts": {
+    "treasury": {
+      "account_id": "treasury.proofee-bond-lab-20261112-1794481933490.testnet",
+      "local_wasm_sha256": "5dfb069925d1303e55f77aee97ce5ebbd422c7a357c05debf213c5c354330c03",
+      "local_code_hash": "7KrvcYZuh2cA9yoq7LHUZFMTCzpkmG3Yq4wFCSbj9FhU",
+      "on_chain_code_hash": "7KrvcYZuh2cA9yoq7LHUZFMTCzpkmG3Yq4wFCSbj9FhU",
+      "matches": true,
+      "keys": []
+    },
+    "mock": {
+      "account_id": "mock.proofee-bond-lab-20261112-1794481933490.testnet",
+      "local_wasm_sha256": "9415047f81be5859b86e0d7ba3d74a1fc77e237c0c4188e8612ec7fed6b84073",
+      "local_code_hash": "Ay3vnVDWwjwwPSYHRj6uHB1JaVwMsoPn594xWWqv4f7x",
+      "on_chain_code_hash": "Ay3vnVDWwjwwPSYHRj6uHB1JaVwMsoPn594xWWqv4f7x",
+      "matches": true,
+      "keys": []
+    }
+  },
+  "liabilities": {
+    "locked": "2000000000000000000000000",
+    "in_flight": "0",
+    "buyback": "0",
+    "reward_funding": "0",
+    "reward_in_flight": "0",
+    "storage_required": "4049830000000000000000000",
+    "operating_buffer": "100000000000000000000000",
+    "account_balance": "8000000000000000000000000"
+  },
+  "account": {
+    "amount": "8000000000000000000000000",
+    "block_hash": "5iL6xjzcidQdTxHgougSZJHcXg6D385dbpxVaHK4rKfL",
+    "block_height": 277356515,
+    "code_hash": "7KrvcYZuh2cA9yoq7LHUZFMTCzpkmG3Yq4wFCSbj9FhU",
+    "locked": "0",
+    "storage_paid_at": 0,
+    "storage_usage": 404983
+  },
+  "block_height": 277356510,
+  "pass": true
+}

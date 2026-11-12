@@ -8,7 +8,7 @@
 - Real near-workspaces / nearcore2.14.1 sandbox workflow PASS:9 scenario groups. Actual VM, signed transactions, asynchronous receipts and NEAR transfers. No mocked PromiseResult in integration suite. Full output evidence/sandbox.log; list of unit tests evidence/test-list.log, unit results evidence/unit.log. Local hashes in sandbox log are NOT public Testnet hashes.
 
 Integration groups:
-1. Production ABI has no register_demo_case export; exact amount/payer; duplicate deposit; authorization/private callback rejection; Qualification rejection refunds full2NEAR.
+1. Production WASM export inspection (evidence/wasm-exports.json) confirms no register_demo_case; runtime scenarios check exact amount/payer; duplicate deposit; authorization/private callback rejection; Qualification rejection refunds full2NEAR.
 2. Qualified losing Challenge -> Slash; timeout cannot undo slash.
 3. Winning Challenge -> principal Refunded -> real separate Mock funding1NEAR -> reward Paid1NEAR; same reward settlement replay does not pay twice.
 4. Two separately deployed Mock Goals with identical textual case/proof IDs: isolated escrow/reserves.
@@ -24,12 +24,20 @@ Unit coverage additionally includes exact timeout boundary, timeout-refund then 
 
 Original nearcore2.6.2 cannot deserialize Rust1.99 WASM; pin official2.14.1. Both binaries require startup65535 FDs, host hard limit16384. Docker --ulimit also denied by host. Supplied Linux-only nofile_adapter.c intercepts only nearcore's exact startup setrlimit(65535,65535) request and actually retains host hard limit; not pretending kernel limit was raised. Wrapper sets RocksDB max_open_files1000 and renames local genesis root to testnet so account suffix guard can be exercised. No financial execution, node bytecode, consensus, signature, timestamp or RPC result is mocked or patched. This is valid small-fixture integration evidence, not a production-node load test. Both runner and adapter source are included for independent reproduction.
 
-## Public Testnet
+## Public Testnet — PASS
 
-See TESTNET_RESULTS.md and evidence/testnet-transactions.json when available. Public deployment is distinct from local sandbox and is not inferred from simulation. Generated dedicated TEST-only signer keys stay in ignored local work directory and are never committed. Treasury/Mock created without keys by atomic create+fund+deploy+new. No existing Goal deployment touched.
+24 confirmed signed transactions recorded, including deployment/provisioning and all three challenge workflows. Treasury and Mock on separate .testnet addresses; no-key account lists verified. Rejection returned2NEAR; winning challenge returned2NEAR plus separately funded1NEAR reward; losing challenge slashed2NEAR into Mock-specific Buyback. Final Treasury balance8NEAR, Buyback2NEAR, all bond/reward locked and in-flight counters0, storage4.07045NEAR plus0.1NEAR buffer covered. Default shipped WASM hashes match on-chain code.
+
+See TESTNET_RESULTS.md and evidence/testnet-transactions.json. Public deployment is distinct from local sandbox and is not inferred from simulation. Generated dedicated TEST-only signer keys stay in ignored local work directory and are never committed. Treasury/Mock created without keys by atomic create+fund+deploy+new. No existing Goal deployment touched.
 
 ## Limits and remaining work
 
 Real Goal adapter and actual creator-fee/final-forfeiture bookkeeping NOT implemented (another developer's responsibility). Mock F/verdicts are authorized simulations funded with faucet TEST NEAR. Team must approve actual timeout durations, final Rejected/Failed mapping and precise F definition. No Multi-Challenger, token treasury, DEX buyback, reserve withdrawal, storage cleanup, migration or upgrade. Pending transfer with lost callback cannot safely be reset on elapsed time; bounded10Tgas callbacks ran successfully in sandbox but outage/gas-schedule risk remains. Mock funding has explicit view recovery; other lost orchestration callbacks may require further recovery design. Payer name deletion/reuse changes who controls that AccountId. Registry revocation blocks new decisions/funding but permissionless deadlines/retries still preserve exit. Conservative pending reservation can temporarily require sponsored operating funds; no haircut allowed. No independent security audit or Mainnet readiness claim.
 
 No unrelated tests of original Goal were modified or represented as new verification; Goal checkout remains unchanged.
+
+## Review notes for real-Goal integrator
+
+Caller settlement namespaces bond:/reward: must stay separate from Treasury's deterministic internal timeout: marker (see ABI). Internal timeout labels are not entries in the caller settlement index; escrow outcome/state remains authoritative, so label reuse cannot re-settle that escrow. For Mock, composed IDs include textual case_id prefixes; use case_id<=121 UTF-8 bytes (prefer a fixed64-char case hash) so reward:<case> stays within Treasury128-byte limit. Treasury itself accepts128-byte case IDs; a real Goal should hash composed settlement IDs rather than append unbounded text. Oversized composed IDs reject settlement; original payer retains neutral timeout exit. These are integration constraints, not extra admin powers.
+
+Reward liveness limitation: initial pay_reward requires the owning authorized Goal. If it is unavailable or revoked while reward is still Funded, initial payment can wait indefinitely until Goal/admin coordination restores authorization. Permissionless retry covers already attempted failed payouts, not initial execution. Production policy must address this; there is no admin withdrawal escape hatch. Treasury does not persist raw F, only fixed validated B/R; real Goal must retain the immutable F snapshot.

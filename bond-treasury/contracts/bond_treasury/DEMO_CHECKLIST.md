@@ -1,22 +1,16 @@
-# Testnet demo checklist — NOT EXECUTED
+# Integrated demo checklist
 
-Only separate fake test cases/test NEAR. Deployment deferred by user. Every transaction hash below is intentionally NOT RUN; do not populate fabricated explorer links.
+Use current workspace README/scripts/testnet-demo.cjs (not old Phase A CLI sequence). Actual public account IDs/hashes/views: TESTNET_RESULTS.md at workspace root; full raw public responses evidence/testnet-transactions.json. Local sandbox hashes are separate and not public explorer evidence.
 
-| Step | Caller | Expected final state / money | Tx hash |
-|---|---|---|---|
-| Atomic account/create/deploy/new | funded testnet parent | no keys; zero principal liabilities | NOT RUN |
-| register_goal + register_demo_case | admin | fixed payer, 2 NEAR, explicit three deadlines | NOT RUN |
-| deposit_bond | exact payer, exactly 2 NEAR | Deposited; locked +2 | NOT RUN |
-| Qualification rejected: settle REFUND | owning demo Goal | Pending -> Refunded; payer gets exactly 2 NEAR; rewards 0 | NOT RUN |
-| Replay same settlement | owning demo Goal | no extra transfer | NOT RUN |
-| New case/deposit/bind/settle SLASH | payer then Goal | Slashed; locked -2; goal Buyback +2; no wallet transfer | NOT RUN |
-| Outsider settle / private callback | outsider | failed receipt; no money changes | NOT RUN |
-| New unbound case past bind_until | anyone | timeout REFUND to original payer | NOT RUN |
-| New bound case during unfinished arbitration past refund_after | anyone | safe REFUND; late Goal SLASH rejected | NOT RUN |
-| Actual failed refund recipient + retry | isolated disposable payer | Retryable -> Pending -> Refunded; never double-paid | NOT RUN |
+1. Atomic create+6TEST NEAR+default WASM+new for Treasury and Mock; assert no account keys. Parent20TEST NEAR funds code/storage/gas, payer3, verifier1; reserve operating budget separately from bond.
+2. Admin register Mock Goal; query interface_version proofee-treasury/0.2.0. Never register unreviewed public Goal.
+3. Mock admin prepares immutable Intent (F10,B2,R1NEAR,explicit deadlines), Treasury authenticates Mock predecessor. Check Mock Ready and exact metadata/payer.
+4. Payer deposit2NEAR -> Treasury Deposited. Payer Mock confirm_escrow -> async exact read/bind -> Mock Bound.
+5. Rejection: Mock admin qualify(false) -> decision then refund. Verify Treasury Refunded and payer balance+2NEAR (Goal/admin trigger settlement, payer not paying this tx's gas). Reward absent.
+6. Winning new case: qualify(true), verifier arbitrate(false) -> final-invalid attestation+refund; verify principal Refunded. Refresh Mock, fund_case1NEAR actual transfer, get_reward Funded; claim_reward -> Paid. Distinct bond/reward settlement IDs; total principal2+reward1NEAR. Funding uses only Mock test reserve, never Treasury bonds.
+7. Losing new case: qualify(true), verifier arbitrate(true) -> Slashed; goal Buyback+2NEAR, no outward transfer. Final liabilities/balance reconcile.
+8. Replay reward settlement -> no second transfer; wrong caller/duplicate deposits/private callback must fail. Fault injection and neutral timeout with late-verdict rejection run in sandbox; do not fabricate public equivalents if not executed.
+9. Check ALL child receipt outcomes and final views, not merely successful orchestrator transaction. Pending isn't Refunded/Paid. Retryable allows dedicated retry to same payer; Pending cannot blindly retry.
+10. Preserve signed tx hash/explorer, current block, bond/reward views, account balances, storage and code hashes. Any failed funding call returns attachment asynchronously; real Goal sync must not count return as revenue.
 
-Before/after each signed operation record: block timestamp; transaction hash plus ALL child receipt outcomes; get_bond; get_liabilities; get_buyback_balance for both Goals; payer/Treasury account balances and storage. Wallet deposit sender pays tx gas, so compare principal separately from caller gas. For refund, have Goal (not payer) trigger settlement so payer balance difference is exactly B. Slash has no outgoing transfer. Buffer/storage and tx gas are not principal.
-
-Use README exact CLI calls. Explorer link format https://testnet.nearblocks.io/txns/HASH . `settle_bond` successful receipt does NOT prove final transfer succeeded; require get_bond.status==Refunded. If Retryable, permissionless retry_failed_refund with >=100 Tgas. If Pending, inspect callback receipt: never reset or resend manually. If funding check fails, donate through fund_storage then retry; never reduce bond amount. If adapter unavailable, keep app P0 without monetary Challenge and label Treasury independent centralized demo.
-
-Gate: all unit tests + actual sandbox execution + explicit timeout decisions + testnet balances/receipts + review. Phase B must not be claimed complete before full adapter/funding/reward workflow evidence.
+Fallback: if real Goal adapter unavailable, use explicitly labeled Mock demo and keep existing Goal P0 unmodified. No Mainnet or real funds. Team still approves product timeout periods and forfeiture semantics before real integration.

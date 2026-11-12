@@ -1,0 +1,10 @@
+{
+  "sandbox_version": "2.14.1",
+  "official_url": "https://s3-us-west-1.amazonaws.com/build.nearprotocol.com/nearcore/Linux-x86_64/2.14.1/near-sandbox.tar.gz",
+  "tar_sha256": "975647b7226e19a9a225c7e6252724260594d1637980fea757f8b583080466ff",
+  "fd_adapter": "tests/sandbox/nofile_adapter.c",
+  "root_namespace": "testnet (local genesis only)",
+  "near_workspaces": "5.0.0",
+  "rust": "1.99.1",
+  "near_sdk": "5.30.1"
+}
