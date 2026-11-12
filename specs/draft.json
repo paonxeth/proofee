@@ -1,0 +1,61 @@
+{
+  "goal": "Draft goal (placeholder)",
+  "creator": "TBD: creator account",
+  "policy_version": "1",
+  "milestones": [
+    {
+      "title": "Milestone 1 (placeholder)",
+      "result": "TBD: what exists when the milestone is done",
+      "deadline_utc": "TBD: YYYY-MM-DDTHH:MM:SSZ",
+      "acceptance_criteria": [
+        "TBD: a checkable criterion"
+      ],
+      "evidence": [
+        "TBD: what the proof must contain (links, screenshots, transactions)"
+      ],
+      "valid_if": [
+        "TBD: the proof counts if ..."
+      ],
+      "invalid_if": [
+        "TBD: the proof is rejected if ..."
+      ],
+      "weight_pct": 20
+    },
+    {
+      "title": "Milestone 2 (placeholder)",
+      "result": "TBD: what exists when the milestone is done",
+      "deadline_utc": "TBD: YYYY-MM-DDTHH:MM:SSZ",
+      "acceptance_criteria": [
+        "TBD: a checkable criterion"
+      ],
+      "evidence": [
+        "TBD: what the proof must contain (links, screenshots, transactions)"
+      ],
+      "valid_if": [
+        "TBD: the proof counts if ..."
+      ],
+      "invalid_if": [
+        "TBD: the proof is rejected if ..."
+      ],
+      "weight_pct": 15
+    },
+    {
+      "title": "Milestone 3 (placeholder)",
+      "result": "TBD: what exists when the milestone is done",
+      "deadline_utc": "TBD: YYYY-MM-DDTHH:MM:SSZ",
+      "acceptance_criteria": [
+        "TBD: a checkable criterion"
+      ],
+      "evidence": [
+        "TBD: what the proof must contain (links, screenshots, transactions)"
+      ],
+      "valid_if": [
+        "TBD: the proof counts if ..."
+      ],
+      "invalid_if": [
+        "TBD: the proof is rejected if ..."
+      ],
+      "weight_pct": 15
+    }
+  ]
+}

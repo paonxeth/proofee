@@ -1,11 +1,11 @@
 {
   "goal_title": "Demo goal",
-  "goal_uri": "",
-  "immediate_bps": 5000,
+  "spec_file": "specs/demo-goal.json",
+  "immediate_bps": 2000,
   "challenge_window_ms": 120000,
   "milestones": [
-    {"title": "Milestone 1 (placeholder)", "weight_bps": 4000, "deadline_days": 3},
-    {"title": "Milestone 2 (placeholder)", "weight_bps": 3000, "deadline_days": 5},
-    {"title": "Milestone 3 (placeholder)", "weight_bps": 3000, "deadline_days": 7}
+    {"title": "Milestone 1 (placeholder)", "weight_bps": 1875, "deadline_days": 3},
+    {"title": "Milestone 2 (placeholder)", "weight_bps": 3125, "deadline_days": 5},
+    {"title": "Milestone 3 (placeholder)", "weight_bps": 5000, "deadline_days": 7}
   ]
 }

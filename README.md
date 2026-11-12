@@ -50,9 +50,15 @@ You need Rust (the version is pinned in `contracts/goal/rust-toolchain.toml`), `
 `verifier.$MASTER` must exist.
 
 ```sh
-scripts/deploy-testnet.sh                        # goal-<first free N>.proofee-anton.testnet
+scripts/deploy-testnet.sh                        # draft goal, goal-<first free N>.proofee-anton.testnet
+scripts/deploy-testnet.sh scripts/goals/demo.json  # goal parameters from a file
 N=5 MASTER=me.testnet scripts/deploy-testnet.sh
+DRY_RUN=1 scripts/deploy-testnet.sh scripts/goals/demo.json  # only print the new() arguments
 ```
+
+The goal spec (`spec_file` in the goal file, e.g. `specs/demo-goal.json`) must be committed and
+pushed. The script passes `goal_uri` as a raw GitHub link pinned to the commit and
+`goal_spec_hash` as the file's sha256.
 
 The script builds the wasm and creates the goal in one transaction from `MASTER`: account, 3 NEAR, code and
 `new`. The goal has no keys; NEAR can leave it only through `claim`.

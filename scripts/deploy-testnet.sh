@@ -9,9 +9,11 @@
 #   MASTER=me.testnet scripts/deploy-testnet.sh
 #   DRY_RUN=1 scripts/deploy-testnet.sh <file>         # only print the new() arguments
 #
-# File format (example: scripts/goals/demo.json): goal_title, goal_uri, immediate_bps,
+# File format (example: scripts/goals/demo.json): goal_title, spec_file, immediate_bps,
 # challenge_window_ms, milestones[{title, weight_bps, deadline_days}].
 # deadline_days counts from the moment the script runs.
+# spec_file is the goal spec in this repo (example: specs/demo-goal.json). It must be committed
+# and pushed: goal_uri becomes a raw GitHub link pinned to the commit, goal_spec_hash its sha256.
 set -euo pipefail
 
 NETWORK=testnet # testnet only, no parameter for it
@@ -19,6 +21,7 @@ MASTER="${MASTER:-proofee-anton.testnet}"
 # A MASTER subaccount: if deleted, only MASTER can recreate it (AUDIT L-5).
 VERIFIER="${VERIFIER:-verifier.$MASTER}"
 DAY_MS=86400000
+RAW_BASE="https://raw.githubusercontent.com/paonxeth/proofee"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WASM="$ROOT/contracts/goal/target/near/goal.wasm"
@@ -42,7 +45,7 @@ else
   GOAL_SPEC=$(cat <<'EOF'
 {
   "goal_title": "Draft goal",
-  "goal_uri": "",
+  "spec_file": "specs/draft.json",
   "immediate_bps": 5000,
   "challenge_window_ms": 120000,
   "milestones": [
@@ -60,6 +63,21 @@ if [[ "$WEIGHT_SUM" != 10000 ]]; then
   echo "weight_bps sum is $WEIGHT_SUM, must be 10000" >&2
   exit 1
 fi
+
+# The goal spec: committed, unchanged and pushed, so the pinned link serves exactly these bytes.
+SPEC_FILE=$(jq -r '.spec_file // empty' <<<"$GOAL_SPEC")
+[[ -n "$SPEC_FILE" ]] || { echo "spec_file is missing" >&2; exit 1; }
+git -C "$ROOT" ls-files --error-unmatch -- "$SPEC_FILE" >/dev/null 2>&1 \
+  || { echo "$SPEC_FILE is not committed" >&2; exit 1; }
+git -C "$ROOT" diff --quiet HEAD -- "$SPEC_FILE" \
+  || { echo "$SPEC_FILE has uncommitted changes" >&2; exit 1; }
+SPEC_COMMIT=$(git -C "$ROOT" log -1 --format=%H -- "$SPEC_FILE")
+if [[ -z "$(git -C "$ROOT" branch -r --contains "$SPEC_COMMIT")" ]]; then
+  echo "$SPEC_FILE: commit $SPEC_COMMIT is not pushed" >&2
+  exit 1
+fi
+GOAL_URI="$RAW_BASE/$SPEC_COMMIT/$SPEC_FILE"
+GOAL_SPEC_HASH=$(git -C "$ROOT" show "$SPEC_COMMIT:$SPEC_FILE" | shasum -a 256 | cut -d' ' -f1)
 
 if [[ -n "$DRY_RUN" ]]; then
   N="${N:-X}" # a dry run does not touch the network
@@ -87,12 +105,14 @@ fi
 
 NOW_MS=$(($(date +%s) * 1000))
 ARGS=$(jq --arg creator "$MASTER" --arg verifier "$VERIFIER" \
+  --arg uri "$GOAL_URI" --arg hash "$GOAL_SPEC_HASH" \
   --argjson now "$NOW_MS" --argjson day "$DAY_MS" '
   {
     creator: $creator,
     verifier: $verifier,
     goal_title,
-    goal_uri,
+    goal_uri: $uri,
+    goal_spec_hash: $hash,
     immediate_bps,
     challenge_window_ms,
     milestones: [.milestones[] | {
@@ -106,6 +126,7 @@ echo "== Goal $GOAL, new() arguments:"
 echo "$ARGS"
 jq -r '.milestones[] | "   \(.weight_bps) bps  until \(.deadline_ms / 1000 | floor | strflocaltime("%Y-%m-%d %H:%M"))  \(.title)"' <<<"$ARGS"
 echo "   weight sum: $WEIGHT_SUM"
+echo "   spec: $SPEC_FILE at $SPEC_COMMIT, sha256 $GOAL_SPEC_HASH"
 
 if [[ -n "$DRY_RUN" ]]; then
   echo "== DRY_RUN: transaction not sent"

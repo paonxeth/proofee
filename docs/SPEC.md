@@ -263,13 +263,14 @@ Integration test (`near-sandbox` + `near-api`, sandbox):
 
 Check near-cli-rs syntax against `near --help`.
 
-1. Deploy a goal: window 120000 ms, three milestones 40/30/30, deadlines a few days out.
+1. Deploy a goal (`scripts/goals/demo.json`): immediate 2000 (20%), window 120000 ms, three
+   milestones 1875/3125/5000 (15/25/40% of all fees), deadlines a few days out.
 2. Simulate fees: transfer 1 NEAR to the contract
    (`near tokens <sender>.testnet send-near <goal>.testnet '1 NEAR' network-config testnet sign-with-keychain send`).
-3. `sync` → `get_balances`: claimable 0.5 NEAR.
-4. `submit_proof` for milestone 0 → wait 2 minutes → `finalize` → claimable 0.7 NEAR.
+3. `sync` → `get_balances`: claimable 0.2 NEAR.
+4. `submit_proof` for milestone 0 → wait 2 minutes → `finalize` → claimable 0.35 NEAR.
 5. `submit_proof` for milestone 1 → `challenge` from a third account → `resolve(1, false)` →
-   forfeited 0.15 NEAR.
+   forfeited 0.25 NEAR.
 6. `claim` → the NEAR arrive at the creator.
 7. Transfer another 1 NEAR → `sync` → the rejected milestone's share is forfeited from the
    new fees too.
