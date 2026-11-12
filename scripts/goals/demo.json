@@ -1,11 +1,20 @@
 {
-  "goal_title": "Demo goal",
+  "goal_title": "Ship ProoFee on NEAR testnet",
   "spec_file": "specs/demo-goal.json",
   "immediate_bps": 2000,
   "challenge_window_ms": 120000,
   "milestones": [
-    {"title": "Milestone 1 (placeholder)", "weight_bps": 1875, "deadline_days": 3},
-    {"title": "Milestone 2 (placeholder)", "weight_bps": 3125, "deadline_days": 5},
-    {"title": "Milestone 3 (placeholder)", "weight_bps": 5000, "deadline_days": 7}
+    {
+      "title": "Goal Contract live on NEAR testnet",
+      "weight_bps": 1875
+    },
+    {
+      "title": "Public web app connected to the contract",
+      "weight_bps": 3125
+    },
+    {
+      "title": "Demo published on X",
+      "weight_bps": 5000
+    }
   ]
 }

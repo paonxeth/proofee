@@ -10,10 +10,11 @@
 #   DRY_RUN=1 scripts/deploy-testnet.sh <file>         # only print the new() arguments
 #
 # File format (example: scripts/goals/demo.json): goal_title, spec_file, immediate_bps,
-# challenge_window_ms, milestones[{title, weight_bps, deadline_days}].
-# deadline_days counts from the moment the script runs.
+# challenge_window_ms, milestones[{title, weight_bps}].
 # spec_file is the goal spec in this repo (example: specs/demo-goal.json). It must be committed
 # and pushed: goal_uri becomes a raw GitHub link pinned to the commit, goal_spec_hash its sha256.
+# Milestone deadlines come from deadline_utc in the spec, so the date lives in one place.
+# Only the built-in draft goal uses deadline_days (days from now): its spec has no dates.
 set -euo pipefail
 
 NETWORK=testnet # testnet only, no parameter for it
@@ -78,6 +79,24 @@ if [[ -z "$(git -C "$ROOT" branch -r --contains "$SPEC_COMMIT")" ]]; then
 fi
 GOAL_URI="$RAW_BASE/$SPEC_COMMIT/$SPEC_FILE"
 GOAL_SPEC_HASH=$(git -C "$ROOT" show "$SPEC_COMMIT:$SPEC_FILE" | shasum -a 256 | cut -d' ' -f1)
+SPEC_JSON=$(git -C "$ROOT" show "$SPEC_COMMIT:$SPEC_FILE" | jq .)
+
+# The spec must describe the same milestones: count, and weight_pct = share of all fees.
+SPEC_ERRORS=$(jq -r --argjson spec "$SPEC_JSON" '
+  .immediate_bps as $imm
+  | if (.milestones | length) != ($spec.milestones | length) then
+      "milestones: \(.milestones | length) in the goal, \($spec.milestones | length) in the spec"
+    else
+      range(0; .milestones | length) as $i
+      | (.milestones[$i].weight_bps * (10000 - $imm) / 1000000) as $pct
+      | select($pct != $spec.milestones[$i].weight_pct)
+      | "milestone \($i + 1): weight_bps gives \($pct)% of all fees, spec weight_pct is \($spec.milestones[$i].weight_pct)"
+    end' <<<"$GOAL_SPEC")
+if [[ -n "$SPEC_ERRORS" ]]; then
+  echo "$SPEC_FILE does not match the goal:" >&2
+  echo "$SPEC_ERRORS" >&2
+  exit 1
+fi
 
 if [[ -n "$DRY_RUN" ]]; then
   N="${N:-X}" # a dry run does not touch the network
@@ -106,7 +125,7 @@ fi
 NOW_MS=$(($(date +%s) * 1000))
 ARGS=$(jq --arg creator "$MASTER" --arg verifier "$VERIFIER" \
   --arg uri "$GOAL_URI" --arg hash "$GOAL_SPEC_HASH" \
-  --argjson now "$NOW_MS" --argjson day "$DAY_MS" '
+  --argjson now "$NOW_MS" --argjson day "$DAY_MS" --argjson spec "$SPEC_JSON" '
   {
     creator: $creator,
     verifier: $verifier,
@@ -115,16 +134,19 @@ ARGS=$(jq --arg creator "$MASTER" --arg verifier "$VERIFIER" \
     goal_spec_hash: $hash,
     immediate_bps,
     challenge_window_ms,
-    milestones: [.milestones[] | {
+    milestones: [range(0; .milestones | length) as $i | .milestones[$i] | {
       title,
       weight_bps,
-      deadline_ms: ($now + (.deadline_days * $day | floor))
+      deadline_ms: (if .deadline_days != null
+        then $now + (.deadline_days * $day | floor)
+        else ($spec.milestones[$i].deadline_utc | fromdateiso8601) * 1000
+        end)
     }]
   }' <<<"$GOAL_SPEC")
 
 echo "== Goal $GOAL, new() arguments:"
 echo "$ARGS"
-jq -r '.milestones[] | "   \(.weight_bps) bps  until \(.deadline_ms / 1000 | floor | strflocaltime("%Y-%m-%d %H:%M"))  \(.title)"' <<<"$ARGS"
+jq -r '.milestones[] | "   \(.weight_bps) bps  until \(.deadline_ms / 1000 | floor | strftime("%Y-%m-%d %H:%M UTC"))  \(.title)"' <<<"$ARGS"
 echo "   weight sum: $WEIGHT_SUM"
 echo "   spec: $SPEC_FILE at $SPEC_COMMIT, sha256 $GOAL_SPEC_HASH"
 

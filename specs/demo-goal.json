@@ -1,59 +1,80 @@
 {
-  "goal": "Demo goal (placeholder)",
-  "creator": "TBD: creator account",
-  "policy_version": "1",
+  "goal": "Ship ProoFee on NEAR testnet",
+  "creator": "proofee-anton.testnet",
+  "policy_version": "0.1-hackathon",
   "milestones": [
     {
-      "title": "Milestone 1 (placeholder)",
-      "result": "TBD: what exists when the milestone is done",
-      "deadline_utc": "TBD: YYYY-MM-DDTHH:MM:SSZ",
+      "title": "Goal Contract live on NEAR testnet",
+      "result": "The goal contract is deployed from the public repo with no access keys, all tests pass.",
+      "deadline_utc": "2026-11-14T20:59:00Z",
       "acceptance_criteria": [
-        "TBD: a checkable criterion"
+        "The goal contract is deployed on NEAR testnet from the public repo.",
+        "The goal account has no access keys.",
+        "All tests pass."
       ],
       "evidence": [
-        "TBD: what the proof must contain (links, screenshots, transactions)"
+        "GitHub commit link",
+        "nearblocks account page",
+        "Test output"
       ],
       "valid_if": [
-        "TBD: the proof counts if ..."
+        "The account exists.",
+        "The account has no access keys.",
+        "Its get_goal returns this spec hash."
       ],
       "invalid_if": [
-        "TBD: the proof is rejected if ..."
+        "The account is missing.",
+        "The account has keys.",
+        "The hash differs."
       ],
       "weight_pct": 15
     },
     {
-      "title": "Milestone 2 (placeholder)",
-      "result": "TBD: what exists when the milestone is done",
-      "deadline_utc": "TBD: YYYY-MM-DDTHH:MM:SSZ",
+      "title": "Public web app connected to the contract",
+      "result": "A public URL where anyone can see this goal and its milestones read live from chain and connect a NEAR wallet.",
+      "deadline_utc": "2026-11-15T20:59:00Z",
       "acceptance_criteria": [
-        "TBD: a checkable criterion"
+        "The web app is available at a public URL.",
+        "It shows this goal and its milestones read live from chain.",
+        "Anyone can connect a NEAR wallet."
       ],
       "evidence": [
-        "TBD: what the proof must contain (links, screenshots, transactions)"
+        "URL",
+        "Short screen recording"
       ],
       "valid_if": [
-        "TBD: the proof counts if ..."
+        "The URL opens.",
+        "It shows live on-chain state.",
+        "Wallet connect works."
       ],
       "invalid_if": [
-        "TBD: the proof is rejected if ..."
+        "No URL.",
+        "A static mockup.",
+        "Data not from chain."
       ],
       "weight_pct": 25
     },
     {
-      "title": "Milestone 3 (placeholder)",
-      "result": "TBD: what exists when the milestone is done",
-      "deadline_utc": "TBD: YYYY-MM-DDTHH:MM:SSZ",
+      "title": "Demo published on X",
+      "result": "A public X post with a demo video and a link to this goal.",
+      "deadline_utc": "2026-11-21T20:59:00Z",
       "acceptance_criteria": [
-        "TBD: a checkable criterion"
+        "A public post on X.",
+        "The post has a demo video.",
+        "The post links to this goal."
       ],
       "evidence": [
-        "TBD: what the proof must contain (links, screenshots, transactions)"
+        "Post link"
       ],
       "valid_if": [
-        "TBD: the proof counts if ..."
+        "The post is public.",
+        "It has the video.",
+        "It has the goal link."
       ],
       "invalid_if": [
-        "TBD: the proof is rejected if ..."
+        "No post.",
+        "No video.",
+        "The post is deleted."
       ],
       "weight_pct": 40
     }
