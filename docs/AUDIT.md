@@ -80,7 +80,7 @@ second window the picture is almost the same.
 The demo scenario (120 000) and the integration test (600 000) pass. The upper bound
 is best added in the same change (see L-3).
 
-### M-3. The verifier can challenge and reject a milestone themselves · Medium · known (1)
+### M-3. The verifier can challenge and reject a milestone themselves · Medium · known (1) · partially fixed
 
 **Where:** `src/lib.rs:261` (only `!= creator` is checked), `src/lib.rs:292`.
 
@@ -389,8 +389,8 @@ are already done, but the right solution is a multisig or DAO).
 
 ## Fix status
 
-Updated 10 November 2026. Every fix followed the order SPEC → code → test →
-`cargo test`. After the last commit: 79 unit tests and 3 integration tests, all green.
+Updated 12 November 2026. Every fix followed the order SPEC → code → test →
+`cargo test`. After the last commit: 83 unit tests and 3 integration tests, all green.
 Nothing was deployed to testnet.
 
 ### Fixed
@@ -408,11 +408,16 @@ Nothing was deployed to testnet.
 | I-4 | `cc32d3a` | deleted `contracts/goal/.github` (template CI with `without-init-call`) and the template `README.md` | — |
 | I-8 (Cargo.toml) | `cc32d3a` | filled in `description` and `repository` for NEP-330 | — |
 
+### Partially fixed
+
+| ID | Commit | What was done | What remains | Tests |
+| --- | --- | --- | --- | --- |
+| M-3 | `0481518` | `challenge` from the verifier fails with `"Verifier cannot challenge"`; self-dealing is no longer visible in `proof_challenged` events | the verifier can still challenge from a second account and reject; real protection is a multisig or DAO verifier and a challenge bond, outside the MVP | `challenge_rejects_verifier` |
+
 ### Left as is
 
 | ID | Why |
 | --- | --- |
-| M-3 | A `challenger != verifier` check is bypassed with a second account. The real solution is a multisig or DAO verifier and a challenge bond, which is outside the MVP. The M-1 timeout does not help here: the verifier rejects within 24 h. |
 | L-5 (creator) | If the creator deletes their top-level account, someone else can take the name and claim the claimable amount. This is solved organizationally: do not delete the creator account. |
 | L-5 (demo) | In `deploy-testnet.sh` creator = `MASTER`, and the verifier is its subaccount. In the demo the team and the creator are the same person, which is fine. For real goals the verifier must not belong to the creator. |
 | L-6 | `assert_one_yocto` changes SPEC 7 and the UX (every `resolve` is confirmed in the wallet). Postponed until after the hackathon; until then the frontend must not request a function-call key for the goal contract. |
