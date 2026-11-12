@@ -13,7 +13,7 @@ audit: [docs/AUDIT.md](docs/AUDIT.md).
 
 In short:
 - `new` fixes the creator, the verifier, the immediate share (`immediate_bps`), the challenge window and
-  1–5 milestones with weights and deadlines. There are no admin methods and no parameter changes.
+  3–5 milestones with weights and deadlines. There are no admin methods and no parameter changes.
 - Any NEAR received above the accounted balance is income. `sync` counts it.
 - A milestone: `submit_proof` (creator) → challenge window → `finalize` (anyone) or
   `challenge` (anyone except the creator) → `resolve` (verifier). If the verifier has not resolved

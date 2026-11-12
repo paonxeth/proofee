@@ -7,6 +7,7 @@ mod math;
 
 use math::BPS_DENOMINATOR;
 
+const MIN_MILESTONES: usize = 3;
 const MAX_MILESTONES: usize = 5;
 const MAX_TITLE_LEN: usize = 100;
 const MAX_URI_LEN: usize = 256;
@@ -173,8 +174,8 @@ impl Goal {
             "Window too long"
         );
         require!(
-            (1..=MAX_MILESTONES).contains(&milestones.len()),
-            "Need 1-5 milestones"
+            (MIN_MILESTONES..=MAX_MILESTONES).contains(&milestones.len()),
+            "Need 3-5 milestones"
         );
 
         let now_ms = env::block_timestamp_ms();
@@ -629,14 +630,30 @@ mod tests {
 
     // SPEC 10, test 2
     #[test]
-    #[should_panic(expected = "Need 1-5 milestones")]
+    #[should_panic(expected = "Need 3-5 milestones")]
     fn new_rejects_zero_milestones() {
         set_context(creator());
         new_goal(verifier(), milestones(&[]));
     }
 
     #[test]
-    #[should_panic(expected = "Need 1-5 milestones")]
+    #[should_panic(expected = "Need 3-5 milestones")]
+    fn new_rejects_two_milestones() {
+        set_context(creator());
+        new_goal(verifier(), milestones(&[5000, 5000]));
+    }
+
+    #[test]
+    fn new_accepts_three_and_five_milestones() {
+        set_context(creator());
+        let goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
+        assert_eq!(goal.get_goal().milestones.len(), 3);
+        let goal = new_goal(verifier(), milestones(&[2000, 2000, 2000, 2000, 2000]));
+        assert_eq!(goal.get_goal().milestones.len(), 5);
+    }
+
+    #[test]
+    #[should_panic(expected = "Need 3-5 milestones")]
     fn new_rejects_six_milestones() {
         set_context(creator());
         new_goal(
@@ -656,7 +673,7 @@ mod tests {
     #[should_panic(expected = "Deadline must be in future")]
     fn new_rejects_deadline_in_past() {
         set_context(creator());
-        let mut ms = milestones(&[5000, 5000]);
+        let mut ms = milestones(&[4000, 3000, 3000]);
         ms[1].deadline_ms = NOW_MS - 1;
         new_goal(verifier(), ms);
     }
@@ -665,7 +682,7 @@ mod tests {
     #[should_panic(expected = "Deadline must be in future")]
     fn new_rejects_deadline_equal_to_now() {
         set_context(creator());
-        let mut ms = milestones(&[10_000]);
+        let mut ms = milestones(&[4000, 3000, 3000]);
         ms[0].deadline_ms = NOW_MS;
         new_goal(verifier(), ms);
     }
@@ -674,35 +691,35 @@ mod tests {
     #[should_panic(expected = "Weight must be > 0")]
     fn new_rejects_zero_weight() {
         set_context(creator());
-        new_goal(verifier(), milestones(&[10_000, 0]));
+        new_goal(verifier(), milestones(&[5000, 5000, 0]));
     }
 
     #[test]
     #[should_panic(expected = "Goal title must be 1-100 chars")]
     fn new_rejects_empty_goal_title() {
         set_context(creator());
-        new_goal_with("", "", 5000, 120_000, milestones(&[10_000]));
+        new_goal_with("", "", 5000, 120_000, milestones(&[4000, 3000, 3000]));
     }
 
     #[test]
     #[should_panic(expected = "Goal title must be 1-100 chars")]
     fn new_rejects_long_goal_title() {
         set_context(creator());
-        new_goal_with(&"a".repeat(101), "", 5000, 120_000, milestones(&[10_000]));
+        new_goal_with(&"a".repeat(101), "", 5000, 120_000, milestones(&[4000, 3000, 3000]));
     }
 
     #[test]
     #[should_panic(expected = "URI too long")]
     fn new_rejects_long_goal_uri() {
         set_context(creator());
-        new_goal_with("Goal", &"a".repeat(257), 5000, 120_000, milestones(&[10_000]));
+        new_goal_with("Goal", &"a".repeat(257), 5000, 120_000, milestones(&[4000, 3000, 3000]));
     }
 
     #[test]
     #[should_panic(expected = "Milestone title must be 1-100 chars")]
     fn new_rejects_long_milestone_title() {
         set_context(creator());
-        let mut ms = milestones(&[10_000]);
+        let mut ms = milestones(&[4000, 3000, 3000]);
         ms[0].title = "a".repeat(101);
         new_goal(verifier(), ms);
     }
@@ -711,14 +728,14 @@ mod tests {
     #[should_panic(expected = "immediate_bps must be <= 10000")]
     fn new_rejects_immediate_bps_above_10000() {
         set_context(creator());
-        new_goal_with("Goal", "", 10_001, 120_000, milestones(&[10_000]));
+        new_goal_with("Goal", "", 10_001, 120_000, milestones(&[4000, 3000, 3000]));
     }
 
     #[test]
     #[should_panic(expected = "Window too short")]
     fn new_rejects_zero_window() {
         set_context(creator());
-        new_goal_with("Goal", "", 5000, 0, milestones(&[10_000]));
+        new_goal_with("Goal", "", 5000, 0, milestones(&[4000, 3000, 3000]));
     }
 
     // AUDIT M-2: a 1 ms window made challenging impossible.
@@ -726,7 +743,7 @@ mod tests {
     #[should_panic(expected = "Window too short")]
     fn new_rejects_window_below_minute() {
         set_context(creator());
-        new_goal_with("Goal", "", 5000, 59_999, milestones(&[10_000]));
+        new_goal_with("Goal", "", 5000, 59_999, milestones(&[4000, 3000, 3000]));
     }
 
     // AUDIT L-3: a u64::MAX window broke window_end and locked the milestone in Submitted.
@@ -734,7 +751,7 @@ mod tests {
     #[should_panic(expected = "Window too long")]
     fn new_rejects_window_above_30_days() {
         set_context(creator());
-        new_goal_with("Goal", "", 5000, 30 * DAY_MS + 1, milestones(&[10_000]));
+        new_goal_with("Goal", "", 5000, 30 * DAY_MS + 1, milestones(&[4000, 3000, 3000]));
     }
 
     // AUDIT L-3: a deadline far in the future kept the milestone from ever failing.
@@ -742,7 +759,7 @@ mod tests {
     #[should_panic(expected = "Deadline too far")]
     fn new_rejects_deadline_beyond_year() {
         set_context(creator());
-        let mut ms = milestones(&[10_000]);
+        let mut ms = milestones(&[4000, 3000, 3000]);
         ms[0].deadline_ms = NOW_MS + 365 * DAY_MS + 1;
         new_goal_with("Goal", "", 5000, 120_000, ms);
     }
@@ -750,7 +767,7 @@ mod tests {
     #[test]
     fn new_accepts_upper_limits() {
         set_context(creator());
-        let mut ms = milestones(&[10_000]);
+        let mut ms = milestones(&[4000, 3000, 3000]);
         ms[0].deadline_ms = NOW_MS + 365 * DAY_MS;
         let goal = new_goal_with("Goal", "", 5000, 30 * DAY_MS, ms);
         assert_eq!(goal.get_goal().challenge_window_ms, 30 * DAY_MS);
@@ -759,7 +776,7 @@ mod tests {
     /// `new` with balance `balance` and the mock's default storage (307 200 bytes).
     fn new_with_balance(balance: NearToken) -> Goal {
         set_context_with(creator(), balance, NearToken::from_near(0));
-        new_goal(verifier(), milestones(&[10_000]))
+        new_goal(verifier(), milestones(&[4000, 3000, 3000]))
     }
 
     /// Minimum deposit: (307 200 + 2 × 16 000) bytes × 10^19 yocto.
@@ -790,7 +807,7 @@ mod tests {
             String::new(),
             5000,
             120_000,
-            milestones(&[10_000]),
+            milestones(&[4000, 3000, 3000]),
         );
     }
 
@@ -799,14 +816,14 @@ mod tests {
     #[should_panic(expected = "Verifier cannot be the contract")]
     fn new_rejects_verifier_equal_to_contract() {
         set_context(creator());
-        new_goal("goal.testnet".parse().unwrap(), milestones(&[10_000]));
+        new_goal("goal.testnet".parse().unwrap(), milestones(&[4000, 3000, 3000]));
     }
 
     #[test]
     fn new_accepts_limits() {
         set_context(creator());
         // Length is counted in characters, not bytes: "é" is 2 bytes but 1 character.
-        let mut ms = milestones(&[10_000]);
+        let mut ms = milestones(&[4000, 3000, 3000]);
         ms[0].title = "é".repeat(100);
         ms[0].deadline_ms = NOW_MS + 1;
         let goal = new_goal_with(&"é".repeat(100), &"a".repeat(256), 10_000, 60_000, ms);
@@ -852,7 +869,7 @@ mod tests {
     #[test]
     fn set_token_by_creator() {
         set_context(creator());
-        let mut goal = new_goal(verifier(), milestones(&[10_000]));
+        let mut goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
         let token: AccountId = "meme.testnet".parse().unwrap();
         goal.set_token(token.clone());
         assert_eq!(goal.get_goal().token, Some(token));
@@ -862,7 +879,7 @@ mod tests {
     #[should_panic(expected = "Token already set")]
     fn set_token_only_once() {
         set_context(creator());
-        let mut goal = new_goal(verifier(), milestones(&[10_000]));
+        let mut goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
         goal.set_token("meme.testnet".parse().unwrap());
         goal.set_token("other.testnet".parse().unwrap());
     }
@@ -871,7 +888,7 @@ mod tests {
     #[should_panic(expected = "Only creator")]
     fn set_token_rejects_stranger() {
         set_context(creator());
-        let mut goal = new_goal(verifier(), milestones(&[10_000]));
+        let mut goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
         set_context(stranger());
         goal.set_token("meme.testnet".parse().unwrap());
     }
@@ -880,7 +897,7 @@ mod tests {
     #[test]
     fn sync_ignores_initial_deposit() {
         set_context(creator());
-        let mut goal = new_goal(verifier(), milestones(&[10_000]));
+        let mut goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
         goal.sync();
         assert_eq!(goal.total_received, NearToken::from_near(0));
         assert_eq!(goal.last_balance, NearToken::from_near(5));
@@ -890,7 +907,7 @@ mod tests {
     #[test]
     fn sync_counts_incoming_transfer() {
         set_context(creator());
-        let mut goal = new_goal(verifier(), milestones(&[10_000]));
+        let mut goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
 
         // 10 NEAR arrived at the contract as a plain transfer.
         set_context_with(stranger(), NearToken::from_near(15), NearToken::from_near(0));
@@ -917,7 +934,7 @@ mod tests {
     #[test]
     fn deposit_counts_attached_near() {
         set_context(creator());
-        let mut goal = new_goal(verifier(), milestones(&[10_000]));
+        let mut goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
 
         // 5 NEAR before, 2 attached: the balance inside the call is 7.
         set_context_with(stranger(), NearToken::from_near(5), NearToken::from_near(2));

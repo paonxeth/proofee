@@ -83,7 +83,8 @@ async fn setup() -> TestResult<Env> {
         "challenge_window_ms": WINDOW_MS,
         "milestones": [
             {"title": "M1", "weight_bps": 6000, "deadline_ms": now_ms + 7 * DAY_MS},
-            {"title": "M2", "weight_bps": 4000, "deadline_ms": now_ms + 7 * DAY_MS},
+            {"title": "M2", "weight_bps": 2000, "deadline_ms": now_ms + 7 * DAY_MS},
+            {"title": "M3", "weight_bps": 2000, "deadline_ms": now_ms + 7 * DAY_MS},
         ],
     });
 

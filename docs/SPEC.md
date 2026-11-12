@@ -34,7 +34,7 @@ fees as plain transfers (verified on mainnet with launch #3680).
 | `goal_uri` | String | up to 256 characters | link to the goal description |
 | `immediate_bps` | u16 | ≤ 10000 | 5000 (50%) |
 | `challenge_window_ms` | u64 | from 60000 (1 min) to 2592000000 (30 days) inclusive | 120000 (2 minutes); default 86400000 (24 h) |
-| `milestones` | Vec<MilestoneInput> | 1–5 milestones, each with `weight_bps` > 0, weights sum to 10000, `deadline_ms` > current time and ≤ current time + 31536000000 (365 days), `title` 1–100 characters | |
+| `milestones` | Vec<MilestoneInput> | 3–5 milestones, each with `weight_bps` > 0, weights sum to 10000, `deadline_ms` > current time and ≤ current time + 31536000000 (365 days), `title` 1–100 characters | |
 
 `MilestoneInput { title: String, weight_bps: u16, deadline_ms: u64 }`
 
@@ -205,7 +205,7 @@ Error messages are short and clear: `"Only creator"`, `"Only verifier"`,
 `"Creator cannot be the contract"`, `"Verifier cannot be the contract"`,
 `"Goal title must be 1-100 chars"`, `"Milestone title must be 1-100 chars"`, `"URI too long"`,
 `"immediate_bps must be <= 10000"`, `"Window too short"`, `"Window too long"`,
-`"Need 1-5 milestones"`, `"Weight must be > 0"`, `"Deadline must be in future"`,
+`"Need 3-5 milestones"`, `"Weight must be > 0"`, `"Deadline must be in future"`,
 `"Deadline too far"`, `"Deposit too small for storage"`, `"Token already set"`, `"Math overflow"`, `"No submission time"`.
 
 ## 8. Events (NEP-297)
@@ -237,7 +237,7 @@ Format: `EVENT_JSON:{"standard":"proofee","version":"1.0.0","event":"<name>","da
 Unit tests (`near-sdk` with `VMContextBuilder`):
 
 1. `new` rejects weights that do not sum to 10000.
-2. `new` rejects 0 or more than 5 milestones, and `verifier == creator`.
+2. `new` rejects fewer than 3 or more than 5 milestones, and `verifier == creator`.
 3. `sync` counts an incoming transfer as income, but not the initial deposit.
 4. The split into immediate and locked matches the formula (the example from 5.2).
 5. `submit_proof`: creator only, only from Pending, only before the deadline, the hash is validated.

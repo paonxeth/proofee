@@ -30,6 +30,10 @@
 - `new` limits: challenge window 60 s – 30 days, deadline at most 365 days ahead, creator and
   verifier differ from the contract address, deposit ≥ storage + 2 × 16000 bytes.
 
+## 2026-11-12
+
+- Hackathon plan from the team: 3–5 milestones per goal (was 1–5).
+
 ## Open
 
 - Can the creator change `fee_to` after launch in Nearly.
