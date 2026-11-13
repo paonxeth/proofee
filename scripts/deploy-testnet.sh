@@ -8,6 +8,11 @@
 #   N=5 scripts/deploy-testnet.sh                      # N set manually
 #   MASTER=me.testnet scripts/deploy-testnet.sh
 #   DRY_RUN=1 scripts/deploy-testnet.sh <file>         # only print the new() arguments
+#   TREASURY=treasury.x.testnet scripts/deploy-testnet.sh <file>  # bonded challenges (SPEC 6a)
+#
+# TREASURY empty (default): new() gets no treasury argument, the free challenge as before.
+# TREASURY set: must be a Bond Treasury proofee-treasury/0.2.0; its admin must call
+# register_goal for this goal before the first prepare_challenge (the script only checks).
 #
 # File format (example: scripts/goals/demo.json): goal_title, spec_file, immediate_bps,
 # challenge_window_ms, milestones[{title, weight_bps}].
@@ -21,6 +26,8 @@ NETWORK=testnet # testnet only, no parameter for it
 MASTER="${MASTER:-proofee-anton.testnet}"
 # A MASTER subaccount: if deleted, only MASTER can recreate it (AUDIT L-5).
 VERIFIER="${VERIFIER:-verifier.$MASTER}"
+TREASURY="${TREASURY:-}"
+TREASURY_INTERFACE='"proofee-treasury/0.2.0"'
 DAY_MS=86400000
 RAW_BASE="https://raw.githubusercontent.com/paonxeth/proofee"
 
@@ -34,6 +41,12 @@ account_exists() {
 view() {
   near contract call-function as-read-only "$1" "$2" json-args '{}' network-config "$NETWORK" now
 }
+
+if [[ -n "$TREASURY" ]]; then
+  [[ "$TREASURY" == *.testnet ]] || { echo "TREASURY must be a .testnet account" >&2; exit 1; }
+  [[ "$TREASURY" != "$MASTER" && "$TREASURY" != "$VERIFIER" ]] \
+    || { echo "TREASURY must differ from the creator and the verifier" >&2; exit 1; }
+fi
 
 GOAL_FILE="${1:-}"
 DRY_RUN="${DRY_RUN:-}"
@@ -143,16 +156,36 @@ ARGS=$(jq --arg creator "$MASTER" --arg verifier "$VERIFIER" \
         end)
     }]
   }' <<<"$GOAL_SPEC")
+if [[ -n "$TREASURY" ]]; then
+  ARGS=$(jq --arg t "$TREASURY" '. + {treasury: $t}' <<<"$ARGS")
+fi
 
 echo "== Goal $GOAL, new() arguments:"
 echo "$ARGS"
 jq -r '.milestones[] | "   \(.weight_bps) bps  until \(.deadline_ms / 1000 | floor | strftime("%Y-%m-%d %H:%M UTC"))  \(.title)"' <<<"$ARGS"
 echo "   weight sum: $WEIGHT_SUM"
 echo "   spec: $SPEC_FILE at $SPEC_COMMIT, sha256 $GOAL_SPEC_HASH"
+echo "   treasury: ${TREASURY:-none (free challenge)}"
 
 if [[ -n "$DRY_RUN" ]]; then
   echo "== DRY_RUN: transaction not sent"
   exit 0
+fi
+
+if [[ -n "$TREASURY" ]]; then
+  echo "== Checking Treasury $TREASURY"
+  IFACE=$(near contract call-function as-read-only "$TREASURY" interface_version json-args '{}' \
+    network-config "$NETWORK" now 2>/dev/null || true)
+  if [[ "$IFACE" != "$TREASURY_INTERFACE" ]]; then
+    echo "$TREASURY: interface_version is '${IFACE:-unreachable}', expected $TREASURY_INTERFACE" >&2
+    exit 1
+  fi
+  REG=$(near contract call-function as-read-only "$TREASURY" get_goal \
+    json-args "{\"goal\":\"$GOAL\"}" network-config "$NETWORK" now 2>/dev/null || true)
+  if [[ "$(jq -r '.authorized // false' <<<"${REG:-null}")" != true ]]; then
+    echo "   WARNING: $GOAL is not registered in $TREASURY yet." >&2
+    echo "   Deploy works, but prepare_challenge fails until the Treasury admin calls register_goal." >&2
+  fi
 fi
 
 echo "== Building wasm"
