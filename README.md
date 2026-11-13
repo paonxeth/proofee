@@ -6,6 +6,19 @@ milestone: the creator publishes a proof, the community can challenge it, and th
 
 NEAR hackathon, track 11. Testnet only.
 
+The code was written with the help of Claude Code and Codex (hackathon rule Q-005).
+
+## Modules
+
+Everything is deployed and verified on NEAR testnet only.
+
+| Module | What it is |
+| --- | --- |
+| [contracts/goal](contracts/goal) | The goal escrow contract (Rust, near-sdk 5): fee accounting, milestones, challenges, `claim`. Described below and in [docs/SPEC.md](docs/SPEC.md). |
+| [bond-treasury](bond-treasury) | Bond Treasury v0.2 and a Mock Goal (Rust): challenge bonds, refunds, slashing and rewards. Verified on testnet against the Mock Goal; see [TESTNET_RESULTS.md](bond-treasury/TESTNET_RESULTS.md). Integration with the real goal is in progress. |
+| [launcher](launcher) | Testnet launcher (Node.js) and an immutable LP Locker (Rust): creates a token, a Rhea DCL pool and a locked LP position, converts LP fees to NEAR and sends them to a goal. See [REPORT.md](launcher/REPORT.md). |
+| [client](client) | Framework-free TypeScript client: reads a goal over JSON-RPC and builds unsigned transactions. Live page below. |
+
 ## How the contract works
 
 Full description: [docs/SPEC.md](docs/SPEC.md); decisions: [docs/DECISIONS.md](docs/DECISIONS.md);
