@@ -37,6 +37,22 @@
   its sha256 as `goal_spec_hash`; `goal_uri` is a raw GitHub link pinned to a commit.
 - The verifier cannot call `challenge` (AUDIT M-3, partial: a second account bypasses it).
 
+## 2026-11-13
+
+- Challenge bond through Bond Treasury v0.2.0 (`bond-treasury/`), optional: `new` takes
+  `treasury: Option<AccountId>`; None keeps the free challenge. Plan: docs/TREASURY_INTEGRATION_PLAN.md.
+- The bond goes from the challenger straight to the Treasury; the goal never holds it, so `sync` and
+  `claim` are unchanged. No challenger reward from forfeited fees.
+- F = the disputed milestone's share of the locked fees counted at request time,
+  `L × weight_bps / 10000`. B and R as the Treasury requires.
+- Deadlines: 10 min to deposit, 10 more to bind, then 24 h (`RESOLVE_TIMEOUT_MS`) to decide;
+  the goal's decision deadline equals the Treasury `refund_after`.
+- Qualification and arbitration by the verifier. Qualification rejected → full refund, milestone back
+  to Submitted. Proof valid → Accepted, bond slashed into the buyback reserve. Proof invalid → Rejected,
+  refund. Timeout → Accepted, neutral refund.
+- Known limitation, fixed after the hackathon: an empty request blocks the milestone for 20 minutes and
+  can be repeated (AUDIT M-4).
+
 ## Open
 
 - Can the creator change `fee_to` after launch in Nearly.

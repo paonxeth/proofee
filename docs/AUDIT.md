@@ -94,6 +94,19 @@ but it protects weakly: the verifier will challenge from another account. The be
 the `proof_challenged` events will not show obvious self-dealing. Real protection is a multisig
 or DAO verifier (SPEC 2) and a challenge bond. Both are outside the MVP.
 
+### M-4. A bondless challenge request blocks real challengers (Treasury mode) · Medium · open, known limitation
+
+Added 13 November 2026 with SPEC 1.1 (section 6a); not part of the 10 November review.
+
+`prepare_challenge` costs only gas and holds the milestone until `bind_until` (20 minutes) without a
+bond: while a request is active, nobody else can file one. The creator, from another account, can file
+an empty request every 20 minutes and keep real challengers out for the whole challenge window, after
+which `finalize` accepts the milestone. Each request also permanently takes storage in the Treasury:
+`register_intent` deletes nothing, and the Treasury pays for that storage.
+
+Not fixed for the hackathon (recorded in SPEC 9). Fix after the hackathon: several requests per
+milestone in parallel, the first one bound wins.
+
 ### L-1. `claim` does not account for the 16 bytes of `payout_in_flight`: payouts can break forever · Low · confirmed
 
 **Where:** `src/lib.rs:332-339` (the reserve is computed from `env::storage_usage()` before the state
@@ -347,6 +360,7 @@ of the code from it. So every fix starts with a SPEC edit.
 | M-1 | Medium | lib.rs:258, :292 | a free challenge with no timeout freezes milestones | 2 | `resolve_timeout` → Accepted | ~30 lines |
 | M-2 | Medium | lib.rs:135 | a 1 ms window disables challenges | 4 | `MIN_CHALLENGE_WINDOW_MS` | 1 line |
 | M-3 | Medium | lib.rs:261 | the verifier challenges and rejects by themselves | 1 | `challenger != verifier` (partial) | 1 line |
+| M-4 | Medium | lib.rs `prepare_challenge` | an empty request holds the milestone 20 min, repeatable; Treasury storage grows | — | parallel requests, first bound wins (after the hackathon) | — |
 | L-1 | Low | lib.rs:332-351 | +16 bytes of `payout_in_flight` → `claim` breaks forever | — | reserve bytes in the cap | 2 lines |
 | L-2 | Low | lib.rs:119, :267 | storage grows at the contract's expense, no minimum deposit | — | balance check in `new` | 2 lines |
 | L-3 | Low | lib.rs:109, :135, :146 | `u64::MAX` window or deadline locks a milestone | — | upper bounds | 2 lines |

@@ -1,6 +1,6 @@
 # ProoFee — goal contract specification (MVP)
 
-Version 1.0 · 8 November 2026 · the source of truth for `contracts/goal`.
+Version 1.1 · 13 November 2026 (1.1: optional challenge bond via Bond Treasury, section 6a) · the source of truth for `contracts/goal`.
 Any change in contract behavior starts with an edit to this file.
 
 ## 1. What it is
@@ -17,7 +17,9 @@ fees as plain transfers (verified on mainnet with launch #3680).
 ## 2. Out of scope for the MVP
 
 - Fees in tokens (NEP-141): the contract accounts for neither the memecoin itself nor wNEAR.
-- Challenge bond.
+- Challenge-winner reward from forfeited fees (Treasury `fund_reward`/`pay_reward`): the goal never
+  sends NEAR to the Treasury, and `sync`/`claim` accounting does not change.
+- Several bonded challenge requests per milestone at once (see 9, known limitation).
 - Resubmitting a proof after rejection.
 - A 3-of-5 committee: in the MVP a single verifier decides. A committee can be added later without
   changing the contract: a multisig or DAO account is set as the verifier.
@@ -35,6 +37,7 @@ fees as plain transfers (verified on mainnet with launch #3680).
 | `goal_spec_hash` | String | sha256 of the goal spec file, exactly 64 lowercase hex characters (as `proof_hash`) | |
 | `immediate_bps` | u16 | ≤ 10000 | 5000 (50%) |
 | `challenge_window_ms` | u64 | from 60000 (1 min) to 2592000000 (30 days) inclusive | 120000 (2 minutes); default 86400000 (24 h) |
+| `treasury` | Option<AccountId> | if set: differs from the contract address, `creator` and `verifier`; may be omitted in JSON (= None) | Bond Treasury v0.2.0 account; None = free challenge as in 1.0 |
 | `milestones` | Vec<MilestoneInput> | 3–5 milestones, each with `weight_bps` > 0, weights sum to 10000, `deadline_ms` > current time and ≤ current time + 31536000000 (365 days), `title` 1–100 characters | |
 
 `MilestoneInput { title: String, weight_bps: u16, deadline_ms: u64 }`
@@ -63,6 +66,7 @@ pub struct Goal {
     claimed: NearToken,            // already paid to the creator
     last_balance: NearToken,       // account balance after the last sync or payout
     payout_in_flight: Option<NearToken>, // payout whose callback has not arrived yet
+    treasury: Option<AccountId>,   // Bond Treasury; None = free challenge (6a)
 }
 
 pub struct Milestone {
@@ -76,7 +80,30 @@ pub struct Milestone {
     challenger: Option<AccountId>,
     challenge_reason: Option<String>,
     challenged_at_ms: Option<u64>, // when challenged; the dispute timeout counts from it
+    challenge_attempts: u32,       // bonded challenge requests ever made (unique Treasury ids)
+    case: Option<ChallengeCase>,   // the latest bonded challenge request (6a); a new one replaces it
 }
+
+pub struct ChallengeCase {
+    proof_id: String,              // "{index}:{proof_hash}:{attempt}"
+    case_id: String,               // "m{index}-{attempt}"
+    payer: AccountId,              // the challenger, the only account that may deposit the bond
+    reason: String,                // stored only here; milestone.challenge_reason stays None in Treasury mode
+    fee_snapshot: U128,            // F (6a)
+    amount: U128,                  // B
+    reward_cap: U128,              // R, passed to the Treasury only; no reward is paid
+    deposit_until_ns: u64,
+    bind_until_ns: u64,
+    refund_after_ns: u64,
+    escrow_id: Option<String>,     // returned by Treasury register_intent
+    stage: CaseStage,
+    decision: Option<Decision>,    // QualificationRejected | ProofValid | ProofInvalidFinal
+    nonce: u64,                    // incremented before every Treasury call; stale callbacks are ignored
+}
+
+pub enum CaseStage { RegisterPending, RegisterRetryable, Ready, VerifyPending, BindPending,
+    BindRetryable, Bound, Qualified, DecisionPending, DecisionRetryable, SettlementPending,
+    SettlementRetryable, Settled, TimeoutRequested, Orphaned }
 
 pub enum MilestoneStatus { Pending, Submitted, Challenged, Accepted, Rejected, Failed }
 ```
@@ -161,6 +188,84 @@ Milestone 3 pending: 15. The creator already claimed 30 → claimable 50 + 20 �
   the default outcome would let anyone forfeit a milestone's share. After the timeout `resolve` no
   longer works, even if nobody has called `resolve_timeout` yet.
 - Time is `env::block_timestamp_ms()`.
+- With a `treasury` (6a), the table rows for `challenge` and `resolve` are replaced by the bonded flow.
+
+## 6a. Challenge with a bond (Treasury mode)
+
+Applies only when `new` received `treasury = Some(..)`. The Treasury is Bond Treasury v0.2.0
+(`bond-treasury/contracts/bond_treasury/ABI.md`); its admin registers the goal with `register_goal`
+before the first challenge. With `treasury = None` everything works as in sections 6 and 7, and the
+methods below fail with `"No treasury"`. With a treasury, `challenge` fails with `"Bond required"`
+and `resolve` with `"Use arbitrate"`.
+
+**The goal never receives the bond.** The challenger deposits it directly into the Treasury. The goal
+attaches no deposit to any Treasury call, so `sync`, `claim` and `last_balance` are unchanged.
+
+### Amounts
+
+```
+F = L * weight_bps / 10000      // L from 5.2 after sync() at prepare_challenge time
+B = min(max(F / 5, 1 NEAR), 5 NEAR)
+R = min(F / 10, B / 2, 2 NEAR)  // required by the Treasury; no reward is ever paid
+```
+
+If a payout is in flight, `sync` is skipped and F uses the income counted so far.
+
+### Deadlines
+
+At `prepare_challenge` (time `t0`, nanoseconds, `ms × 1_000_000` with `checked_mul`):
+`deposit_until = t0 + DEPOSIT_WINDOW_MS`, `bind_until = t0 + DEPOSIT_WINDOW_MS + BIND_WINDOW_MS`,
+`refund_after = bind_until + RESOLVE_TIMEOUT_MS`. `DEPOSIT_WINDOW_MS = BIND_WINDOW_MS = 600000`
+(10 min). In Treasury mode the verifier's deadline is `refund_after` instead of
+`challenged_at_ms + RESOLVE_TIMEOUT_MS`: the verifier always has at least 24 h after the bond is bound,
+and the goal's boundary is exactly the Treasury's (`settle_bond` and `authorize_decision` require
+`now < refund_after`, `refund_expired` requires `now ≥ refund_after`).
+
+The test-only Cargo feature `short-timeouts` shortens these constants for sandbox tests; the release
+wasm is built without it.
+
+### Transitions
+
+| Step | Method | Who | Condition | Effect |
+| --- | --- | --- | --- | --- |
+| request | `prepare_challenge(index, reason)` | anyone except `creator` and `verifier` | Submitted, window open, no active request | `sync`; store the case (RegisterPending); Treasury `register_intent` |
+| retry | `retry_registration(index)` | the case payer | RegisterRetryable | same intent again (the Treasury returns the same escrow) |
+| deposit | Treasury `deposit_bond(escrow_id)`, exactly B | the case payer | `now < deposit_until` | the goal is not involved |
+| bind | `confirm_escrow(index)` | the case payer | Ready or BindRetryable | Treasury `get_bond`, check goal/proof/case/payer/amount/deadlines and status Deposited or Bound, then `bind_bond`; on success: Submitted → **Challenged**, `challenger`, `challenged_at_ms` set |
+| qualify | `qualify(index, qualified)` | `verifier` | Challenged, case Bound, `now < refund_after` | true: case Qualified. false: Challenged → **Submitted** (`challenger`, `challenged_at_ms` cleared), decision QualificationRejected → full REFUND |
+| arbitrate | `arbitrate(index, valid)` | `verifier` | Challenged, case Qualified, `now < refund_after` | valid: → **Accepted**, ProofValid → SLASH (bond to the buyback reserve). invalid: → **Rejected**, ProofInvalidFinal → REFUND |
+| retry | `retry_decision(index)`, `retry_settlement(index)` | anyone | DecisionRetryable / SettlementRetryable | same decision / same `settlement_id = "bond:{case_id}"` again |
+| timeout | `resolve_timeout(index)` | anyone | Challenged, case Bound or Qualified, `now ≥ refund_after` | → **Accepted**, case TimeoutRequested; Treasury `refund_expired` (NeutralRefund) |
+
+An active request is a case that is not Settled, TimeoutRequested or Orphaned, except a case that was
+never bound (RegisterPending … BindRetryable) once `now ≥ bind_until`. `finalize` is blocked only by
+an unbound case with `now < bind_until`; after that the request no longer blocks anything, and a bond
+that was deposited but not bound is returned by anyone through Treasury `refund_expired`.
+
+The milestone status changes in the verifier's (or timeout) call itself, before the Treasury calls;
+the Treasury chain only moves the bond. If a decision reaches the Treasury after `refund_after`, the
+bond is returned neutrally, and the milestone status is still the one the timeout would give (valid →
+Accepted) or the one the bond outcome does not change (invalid → Rejected, the bond is returned).
+
+### Asynchronous calls and failures
+
+Each Treasury call is followed by a `#[private]` callback with `(index, nonce)`. Before the call the
+case stage becomes `*Pending` and `nonce` is incremented. Callbacks never panic: on a stage or nonce
+mismatch they return `false` and change nothing.
+
+| Callback | Success | Failure |
+| --- | --- | --- |
+| `on_registered` | escrow id stored, Ready | RegisterRetryable |
+| `on_verified` | BindPending, calls `bind_bond` | BindRetryable |
+| `on_bound` | Bound, milestone Challenged, event `proof_challenged`; if the milestone is no longer Submitted: Orphaned, milestone untouched | BindRetryable |
+| `on_decided` | SettlementPending, calls `settle_bond` | DecisionRetryable |
+| `on_settled` | Settled (instruction accepted; the final Refunded/Slashed is Treasury `get_bond`) | SettlementRetryable |
+| `on_timeout_refund` | event only | event only (the refund is permissionless in the Treasury) |
+
+Gas: `register_intent` 35 + callback 15, `get_bond` 15 + 80, `bind_bond` 35 + 15,
+`authorize_decision` 35 + 85, `settle_bond` 60 + 15, `refund_expired` 60 + 15 TGas. Callers attach 300 TGas.
+A repeated settlement cannot pay twice: the Treasury treats the same `settlement_id` as a no-op and
+rejects a different one.
 
 ## 7. Methods
 
@@ -168,7 +273,7 @@ Milestone 3 pending: 15. The creator already claimed 30 → claimable 50 + 20 �
 #[init]
 pub fn new(creator: AccountId, verifier: AccountId, goal_title: String, goal_uri: String,
            goal_spec_hash: String, immediate_bps: u16, challenge_window_ms: u64,
-           milestones: Vec<MilestoneInput>) -> Self
+           milestones: Vec<MilestoneInput>, treasury: Option<AccountId>) -> Self
 
 pub fn set_token(&mut self, token: AccountId)                  // creator, once
 #[payable] pub fn deposit(&mut self)                            // anyone, then sync
@@ -181,6 +286,17 @@ pub fn resolve_timeout(&mut self, index: u8)                    // anyone
 pub fn expire(&mut self, index: u8)                             // anyone
 pub fn claim(&mut self) -> Promise                              // creator
 #[private] pub fn on_claim_transfer(&mut self, amount: NearToken)
+
+// Treasury mode (6a)
+pub fn prepare_challenge(&mut self, index: u8, reason: String) -> Promise // anyone except creator and verifier
+pub fn retry_registration(&mut self, index: u8) -> Promise      // case payer
+pub fn confirm_escrow(&mut self, index: u8) -> Promise          // case payer
+pub fn qualify(&mut self, index: u8, qualified: bool) -> Option<Promise> // verifier
+pub fn arbitrate(&mut self, index: u8, valid: bool) -> Promise  // verifier
+pub fn retry_decision(&mut self, index: u8) -> Promise          // anyone
+pub fn retry_settlement(&mut self, index: u8) -> Promise        // anyone
+// resolve_timeout(index) -> Option<Promise>: Some(refund_expired) in Treasury mode
+#[private] on_registered, on_verified, on_bound, on_decided, on_settled, on_timeout_refund (index: u8, nonce: u64)
 
 // view
 pub fn get_goal(&self) -> GoalView          // parameters, goal_spec_hash, milestones, statuses
@@ -203,6 +319,8 @@ Error messages are short and clear: `"Only creator"`, `"Only verifier"`,
 `"Reason too long"`,
 `"Deadline not passed"`, `"Payout in progress"`, `"Resolve time passed"`,
 `"Resolve time not passed"`.
+Treasury mode: `"No treasury"`, `"Bond required"`, `"Use arbitrate"`, `"Challenge in progress"`,
+`"Only payer"`, `"Wrong stage"`.
 
 `new` validation and internal errors: `"Creator and verifier must differ"`,
 `"Creator cannot be the contract"`, `"Verifier cannot be the contract"`,
@@ -210,7 +328,7 @@ Error messages are short and clear: `"Only creator"`, `"Only verifier"`,
 `"Invalid goal spec hash"`,
 `"immediate_bps must be <= 10000"`, `"Window too short"`, `"Window too long"`,
 `"Need 3-5 milestones"`, `"Weight must be > 0"`, `"Deadline must be in future"`,
-`"Deadline too far"`, `"Deposit too small for storage"`, `"Token already set"`, `"Math overflow"`, `"No submission time"`.
+`"Deadline too far"`, `"Treasury cannot be the contract, creator or verifier"`, `"Deposit too small for storage"`, `"Token already set"`, `"Math overflow"`, `"No submission time"`.
 
 ## 8. Events (NEP-297)
 
@@ -223,6 +341,9 @@ Format: `EVENT_JSON:{"standard":"proofee","version":"1.0.0","event":"<name>","da
 | `proof_submitted` | index, proof_uri, proof_hash |
 | `proof_challenged` | index, challenger, reason |
 | `milestone_resolved` | index, status, by |
+| `challenge_prepared` | index, case_id, payer, amount, deposit_until_ns, bind_until_ns, refund_after_ns |
+| `challenge_qualified` | index, qualified |
+| `bond_settlement` | index, decision, stage |
 | `claimed` | amount, total_claimed |
 | `claim_failed` | amount |
 
@@ -235,6 +356,13 @@ Format: `EVENT_JSON:{"standard":"proofee","version":"1.0.0","event":"<name>","da
   and the time.
 - Money that pays for storage is never paid out (5.3).
 - After deploy, delete the full access key and check that no keys are left.
+
+Known limitation of Treasury mode (not fixed in 1.1, AUDIT M-4): `prepare_challenge` costs only gas
+and holds the milestone until `bind_until` without a bond. The creator, from another account, can
+file an empty request every 20 minutes and keep real challengers out for the whole window. Each
+request also permanently takes storage in the Treasury (`register_intent` deletes nothing, and the
+Treasury pays for that storage). Fix after the hackathon: several requests in parallel, the first one
+bound wins.
 
 ## 10. Tests
 
@@ -254,10 +382,20 @@ Unit tests (`near-sdk` with `VMContextBuilder`):
 10. `claim`: pays exactly the claimable amount, a repeated claim → `"Nothing to claim"`, another
     account cannot claim, the callback rolls the counters back on failure.
 
+10a. Treasury mode (6a): `new` checks `treasury`; `challenge`/`resolve` are disabled; F, B, R;
+    request rules (who, active request, expiry after `bind_until`, `finalize` not blocked after it);
+    every callback on success, failure and stale nonce; `on_bound` after `finalize` → Orphaned;
+    `qualify`/`arbitrate` verifier only and only before `refund_after`; `resolve_timeout` boundaries.
+
 Integration test (`near-sandbox` + `near-api`, sandbox):
 
 11. Deploy → transfer 10 NEAR → `sync` → proof → move time past the window (`fast_forward`) →
     `finalize` → `claim` → check the creator and contract balances.
+12. With the real Bond Treasury wasm (`bond-treasury/release/bond_treasury.wasm`): qualification
+    rejected → refund, milestone Submitted; valid → slash + Accepted; invalid → refund + Rejected;
+    timeout → neutral refund + Accepted; a repeated settlement does not pay twice; a stranger cannot
+    qualify or arbitrate; the bond never shows up in `total_received`; after a full `claim` the
+    worst-case request growth fits into the storage reserve.
 
 ## 11. Testnet demo scenario
 
