@@ -277,7 +277,7 @@ async fn on_claim_transfer_is_private() -> TestResult {
 
 /// SPEC 3: the deposit must cover storage plus a 2 × 16 000 byte reserve (AUDIT L-1, L-2).
 /// 3 NEAR, as in scripts/deploy-testnet.sh, is enough even with maximum-length strings;
-/// 1.9 NEAR is not (code ≈ 1.6 NEAR + reserve 0.32 NEAR).
+/// 1.9 NEAR is not (code ≈ 2.1 NEAR + reserve 0.4 NEAR).
 #[tokio::test]
 async fn new_requires_storage_deposit() -> TestResult {
     let env = setup().await?;

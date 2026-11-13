@@ -24,7 +24,9 @@ const MAX_CHALLENGE_WINDOW_MS: u64 = 30 * DAY_MS;
 const MAX_DEADLINE_AHEAD_MS: u64 = 365 * DAY_MS;
 /// Storage reserve that `claim` never pays out (SPEC 3, 5.3). Covers the 16 bytes of
 /// `payout_in_flight` and state growth: a full goal state is ≈ 15 KB.
-const STORAGE_RESERVE_BYTES: u64 = 16_000;
+/// 20 000 ≥ 1.5 × the 13 015 bytes of worst-case growth measured in tests/treasury.rs
+/// (5 proofs + 5 bonded challenge requests, strings at the limit).
+const STORAGE_RESERVE_BYTES: u64 = 20_000;
 /// How long the verifier has to resolve a dispute; after that the milestone is accepted for the creator (SPEC 6).
 #[cfg(not(feature = "short-timeouts"))]
 const RESOLVE_TIMEOUT_MS: u64 = DAY_MS;
@@ -875,8 +877,8 @@ mod tests {
         new_goal(verifier(), milestones(&[4000, 3000, 3000]))
     }
 
-    /// Minimum deposit: (307 200 + 2 × 16 000) bytes × 10^19 yocto.
-    const MIN_DEPOSIT_YOCTO: u128 = 339_200 * 10_000_000_000_000_000_000;
+    /// Minimum deposit: (307 200 + 2 × 20 000) bytes × 10^19 yocto.
+    const MIN_DEPOSIT_YOCTO: u128 = 347_200 * 10_000_000_000_000_000_000;
 
     // AUDIT L-2: without a reserve, storage would be paid from the creator's income.
     #[test]
@@ -1647,9 +1649,9 @@ mod tests {
     fn claim_keeps_storage_reserve() {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
-        // Storage 1 084 000 bytes + reserve 16 000 = 11 NEAR. Free: 15 − 11 = 4 < 5.
-        // Without the reserve (AUDIT L-1) the payout would be 4.16 NEAR.
-        set_claim_env(creator(), NearToken::from_near(15), 1_084_000);
+        // Storage 1 080 000 bytes + reserve 20 000 = 11 NEAR. Free: 15 − 11 = 4 < 5.
+        // Without the reserve (AUDIT L-1) the payout would be 4.2 NEAR.
+        set_claim_env(creator(), NearToken::from_near(15), 1_080_000);
         let _ = goal.claim();
         assert_eq!(goal.claimed, NearToken::from_near(4));
         assert_eq!(goal.get_balances().claimable, NearToken::from_near(1));

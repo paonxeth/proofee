@@ -18,9 +18,9 @@ pub const DEPOSIT_WINDOW_MS: u64 = 600_000;
 pub const BIND_WINDOW_MS: u64 = 600_000;
 /// Test-only build for the sandbox: windows short enough for `fast_forward`.
 #[cfg(feature = "short-timeouts")]
-pub const DEPOSIT_WINDOW_MS: u64 = 60_000;
+pub const DEPOSIT_WINDOW_MS: u64 = 180_000;
 #[cfg(feature = "short-timeouts")]
-pub const BIND_WINDOW_MS: u64 = 60_000;
+pub const BIND_WINDOW_MS: u64 = 180_000;
 
 const ONE_NEAR: u128 = 1_000_000_000_000_000_000_000_000;
 const MAX_RESULT_LEN: usize = 16_384;

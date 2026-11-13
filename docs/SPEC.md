@@ -44,7 +44,7 @@ fees as plain transfers (verified on mainnet with launch #3680).
 
 Deposit: at the end of `new` the account balance must be at least
 `(storage_usage + 2 × STORAGE_RESERVE_BYTES) × storage_byte_cost`, where
-`STORAGE_RESERVE_BYTES = 16000` (≈ 0.32 NEAR on top of the code and the account), otherwise
+`STORAGE_RESERVE_BYTES = 20000` (≈ 0.4 NEAR on top of the code and the account), otherwise
 `"Deposit too small for storage"`. `claim` never pays out one reserve (5.3); the other covers
 state growth (proofs, challenges). This way storage is never paid from the creator's income, and
 `challenge` and `submit_proof` can always write their data.
@@ -222,7 +222,7 @@ and the goal's boundary is exactly the Treasury's (`settle_bond` and `authorize_
 `now < refund_after`, `refund_expired` requires `now ≥ refund_after`).
 
 The test-only Cargo feature `short-timeouts` shortens these constants for sandbox tests
-(`RESOLVE_TIMEOUT_MS` 300000, both windows 60000); the release wasm is built without it.
+(`RESOLVE_TIMEOUT_MS` 300000, both windows 180000); the release wasm is built without it.
 
 ### Transitions
 
