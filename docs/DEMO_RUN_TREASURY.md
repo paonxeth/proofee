@@ -203,3 +203,4 @@ decide before deploying goal-5.
 
 | # | Step | Signed by | Result | Transaction |
 | --- | --- | --- | --- | --- |
+| 1 | Top up MASTER: 1.2 NEAR | proofee-stranger.testnet | MASTER 2.28 → 3.48, stranger 7.997 → 6.797 | [BAmeoybo…](https://testnet.nearblocks.io/txns/BAmeoyboGvWsEMJp6JkBRGfn9vzHmk4Xr9PMJUXBjMmf) |
