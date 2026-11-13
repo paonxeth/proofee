@@ -1,0 +1,34 @@
+{
+  "contract": "goal",
+  "release": "goal-treasury",
+  "description": "ProoFee goal contract with optional Bond Treasury v0.2.0 challenges (SPEC 1.1, section 6a)",
+  "repository": "https://github.com/paonxeth/proofee",
+  "branch": "feat/goal-treasury",
+  "commit": "bcee75e32fac4ec6e09d01c3333c0e439b99c425",
+  "path": "contracts/goal",
+  "spec": "docs/SPEC.md (version 1.1)",
+  "toolchain": {
+    "rust": "1.95.0 (rust-toolchain.toml)",
+    "target": "wasm32-unknown-unknown",
+    "cargo-near": "0.23.0",
+    "near-sdk": "5.30.1"
+  },
+  "build": {
+    "command": "cd contracts/goal && cargo near build non-reproducible-wasm --locked",
+    "output": "contracts/goal/target/near/goal.wasm",
+    "features": [],
+    "reproducible": false,
+    "note": "Rebuilt twice on the same machine with the same hash; not a docker reproducible build."
+  },
+  "test_only_features": {
+    "short-timeouts": "Sandbox tests only (5 min dispute timeout, 3 min windows). Never in a deployed wasm; this release is built without it."
+  },
+  "abi_command": "cd contracts/goal && cargo near abi",
+  "wasm": {
+    "file": "contract.wasm",
+    "size_bytes": 214115,
+    "sha256": "38c70119e1fa95e67cbe01d10589c5081100823d9e2b8860dc7ccd10b1ba17c6",
+    "code_hash_base58": "4pdqE8BBA9HivuaHTNeV4xjzFYCwtXoPV54GJ8UQnt5T"
+  },
+  "treasury_interface": "proofee-treasury/0.2.0"
+}

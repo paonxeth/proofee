@@ -1,0 +1,62 @@
+{
+  "units": "gas in TGas, amounts in yoctoNEAR (strings)",
+  "notes": [
+    "prepaid_gas is the value to attach; unused gas is refunded to the signer.",
+    "Methods with a Treasury call chain need 300 TGas: the callbacks are pre-allocated (SPEC 6a).",
+    "Goal methods reject any attached deposit except `deposit` (payable).",
+    "The goal never receives a bond: the challenger pays it to the Treasury with deposit_bond."
+  ],
+  "goal": {
+    "new": {"prepaid_gas": "100", "deposit": "0", "account_funding": "see storage.new_min_balance", "note": "init; deployed in one transaction: create-account + transfer + deploy + new"},
+    "set_token": {"prepaid_gas": "30", "deposit": "0"},
+    "deposit": {"prepaid_gas": "30", "deposit": "any > 0", "note": "payable; counted as fees by sync"},
+    "sync": {"prepaid_gas": "30", "deposit": "0"},
+    "submit_proof": {"prepaid_gas": "30", "deposit": "0"},
+    "challenge": {"prepaid_gas": "30", "deposit": "0", "note": "free challenge, only when treasury is null"},
+    "finalize": {"prepaid_gas": "30", "deposit": "0"},
+    "resolve": {"prepaid_gas": "30", "deposit": "0", "note": "only when treasury is null"},
+    "resolve_timeout": {"prepaid_gas": "300", "deposit": "0", "note": "30 is enough when treasury is null; with treasury it calls Treasury refund_expired (100) + callback (15)"},
+    "expire": {"prepaid_gas": "30", "deposit": "0"},
+    "claim": {"prepaid_gas": "30", "deposit": "0", "note": "transfer + 10 TGas callback"},
+    "prepare_challenge": {"prepaid_gas": "300", "deposit": "0", "chain": "register_intent 35 + on_registered 15"},
+    "retry_registration": {"prepaid_gas": "300", "deposit": "0", "chain": "register_intent 35 + on_registered 15"},
+    "confirm_escrow": {"prepaid_gas": "300", "deposit": "0", "chain": "get_bond 15 + on_verified 65 (bind_bond 35 + on_bound 15)"},
+    "qualify": {"prepaid_gas": "300", "deposit": "0", "chain": "qualified=true: none; false: authorize_decision 35 + on_decided 125 (settle_bond 100 + on_settled 15)"},
+    "arbitrate": {"prepaid_gas": "300", "deposit": "0", "chain": "authorize_decision 35 + on_decided 125 (settle_bond 100 + on_settled 15)"},
+    "retry_decision": {"prepaid_gas": "300", "deposit": "0", "chain": "as arbitrate"},
+    "retry_settlement": {"prepaid_gas": "300", "deposit": "0", "chain": "settle_bond 100 + on_settled 15"},
+    "get_goal": {"view": true},
+    "get_balances": {"view": true},
+    "contract_source_metadata": {"view": true}
+  },
+  "treasury_user_calls": {
+    "deposit_bond": {"prepaid_gas": "30", "deposit": "exactly get_goal().milestones[i].case.amount (B)", "signer": "case.payer only", "args": {"escrow_id": "get_goal().milestones[i].case.escrow_id"}, "deadline": "before case.deposit_until_ns"},
+    "refund_expired": {"prepaid_gas": "100", "deposit": "0", "signer": "anyone", "note": "fallback: unbound bond after bind_until_ns, or bound bond after refund_after_ns"},
+    "retry_failed_refund": {"prepaid_gas": "100", "deposit": "0", "signer": "anyone", "note": "only when the Treasury bond status is RefundRetryable"},
+    "get_bond": {"view": true, "args": {"escrow_id": "string"}},
+    "get_buyback_balance": {"view": true, "args": {"goal": "account id"}},
+    "interface_version": {"view": true, "returns": "proofee-treasury/0.2.0"}
+  },
+  "bond": {
+    "F": "locked * weight_bps / 10000 at prepare_challenge time (locked = total_received - immediate)",
+    "B": "min(max(F / 5, 1 NEAR), 5 NEAR)",
+    "R": "min(F / 10, B / 2, 2 NEAR); passed to the Treasury only, no reward is paid",
+    "min": "1000000000000000000000000",
+    "max": "5000000000000000000000000"
+  },
+  "deadlines_release": {
+    "challenge_window_ms": "new() parameter, 60000..2592000000",
+    "deposit_window_ms": "600000",
+    "bind_window_ms": "600000 (bind_until = prepare + 20 min)",
+    "resolve_timeout_ms": "86400000 (refund_after = bind_until + 24 h)",
+    "time_units": "case deadlines are nanoseconds (u64 JSON numbers); milestone times are milliseconds"
+  },
+  "storage": {
+    "storage_reserve_bytes": "20000",
+    "new_min_balance": "(storage_usage after new + 2 * 20000) * 10^19 yoctoNEAR",
+    "new_min_balance_approx_3_milestones": "≈ 2.56 NEAR (code 214115 bytes ≈ 2.14 NEAR + state + 0.4 NEAR reserve)",
+    "deploy_script_funding": "3000000000000000000000000",
+    "funding_note": "3 NEAR covers the maximum-size goal (5 milestones, strings at the limit), checked in tests/integration.rs",
+    "growth_measured_bytes": "13015 (5 proofs + 5 bonded requests, strings at the limit); claim never pays out the 20000-byte reserve"
+  }
+}

@@ -9,6 +9,7 @@
 #   MASTER=me.testnet scripts/deploy-testnet.sh
 #   DRY_RUN=1 scripts/deploy-testnet.sh <file>         # only print the new() arguments
 #   TREASURY=treasury.x.testnet scripts/deploy-testnet.sh <file>  # bonded challenges (SPEC 6a)
+#   WASM_FILE=release/goal-treasury/contract.wasm scripts/deploy-testnet.sh <file>  # no rebuild
 #
 # TREASURY empty (default): new() gets no treasury argument, the free challenge as before.
 # TREASURY set: must be a Bond Treasury proofee-treasury/0.2.0; its admin must call
@@ -32,7 +33,7 @@ DAY_MS=86400000
 RAW_BASE="https://raw.githubusercontent.com/paonxeth/proofee"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-WASM="$ROOT/contracts/goal/target/near/goal.wasm"
+WASM="${WASM_FILE:-$ROOT/contracts/goal/target/near/goal.wasm}"
 
 account_exists() {
   near --quiet account view-account-summary "$1" network-config "$NETWORK" now >/dev/null 2>&1
@@ -188,8 +189,13 @@ if [[ -n "$TREASURY" ]]; then
   fi
 fi
 
-echo "== Building wasm"
-(cd "$ROOT/contracts/goal" && cargo near build non-reproducible-wasm)
+if [[ -n "${WASM_FILE:-}" ]]; then
+  [[ -s "$WASM" ]] || { echo "No such wasm: $WASM" >&2; exit 1; }
+  echo "== Using prebuilt $WASM (no rebuild), sha256 $(shasum -a 256 "$WASM" | cut -d' ' -f1)"
+else
+  echo "== Building wasm"
+  (cd "$ROOT/contracts/goal" && cargo near build non-reproducible-wasm)
+fi
 
 # One transaction: if any action fails, all of them roll back, and there is no window
 # between deploy and new. MASTER signs, so the unused gas refund goes to MASTER, not to the goal
@@ -203,6 +209,18 @@ near transaction construct-transaction "$MASTER" receiver-id "$GOAL" \
   skip network-config "$NETWORK" sign-with-keychain send
 
 echo "== Done: $GOAL"
+# The deployed code must be exactly this file: compare the network code_hash with sha256 of the wasm.
+EXPECTED=$(python3 -I -c 'import hashlib,sys
+d=hashlib.sha256(open(sys.argv[1],"rb").read()).digest()
+A="123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+n=int.from_bytes(d,"big"); s=""
+while n: n,r=divmod(n,58); s=A[r]+s
+print(s)' "$WASM")
+ACTUAL=$(curl -s https://rpc.testnet.near.org -H 'Content-Type: application/json' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":\"x\",\"method\":\"query\",\"params\":{\"request_type\":\"view_account\",\"finality\":\"final\",\"account_id\":\"$GOAL\"}}" \
+  | jq -r .result.code_hash)
+echo "   code_hash: network $ACTUAL, file $EXPECTED"
+[[ "$ACTUAL" == "$EXPECTED" ]] || echo "   WARNING: code_hash differs (or the final block is not there yet; re-check)" >&2
 view "$GOAL" get_goal
 view "$GOAL" get_balances
 echo "== Keys of $GOAL (must be empty)"

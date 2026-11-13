@@ -88,11 +88,11 @@ near tokens $CHALLENGER send-near $CREATOR '1.2 NEAR' network-config testnet sig
 ### 2. Deploy the goal
 
 ```zsh
-DRY_RUN=1 N=5 TREASURY=$TREASURY scripts/deploy-testnet.sh scripts/goals/demo-treasury.json   # check arguments
-N=5 TREASURY=$TREASURY scripts/deploy-testnet.sh scripts/goals/demo-treasury.json
+WASM_FILE=release/goal-treasury/contract.wasm DRY_RUN=1 N=5 TREASURY=$TREASURY scripts/deploy-testnet.sh scripts/goals/demo-treasury.json   # check arguments
+WASM_FILE=release/goal-treasury/contract.wasm N=5 TREASURY=$TREASURY scripts/deploy-testnet.sh scripts/goals/demo-treasury.json
 ```
 
-The script checks `interface_version` and warns if step 0 is not done yet. Check: `get_goal` has
+The prebuilt release wasm is deployed without rebuilding (code hash `4pdqE8BBA9HivuaHTNeV4xjzFYCwtXoPV54GJ8UQnt5T`, the script compares it with the network). The script checks `interface_version` and warns if step 0 is not done yet. Check: `get_goal` has
 `"treasury": "<TREASURY>"`, keys list is empty.
 
 ### 3. Simulated fees: 1 NEAR + sync

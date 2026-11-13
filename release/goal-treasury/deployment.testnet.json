@@ -1,0 +1,24 @@
+{
+  "network": "testnet",
+  "status": "TEMPLATE: filled after the testnet run (docs/DEMO_RUN_TREASURY.md)",
+  "goal": {
+    "account_id": null,
+    "code_hash_base58": "4pdqE8BBA9HivuaHTNeV4xjzFYCwtXoPV54GJ8UQnt5T",
+    "deploy_tx": null,
+    "access_keys": [],
+    "init_args": null
+  },
+  "treasury": {
+    "account_id": "treasury.proofee-bond-lab-20261112-1794481933490.testnet",
+    "interface_version": "proofee-treasury/0.2.0",
+    "code_hash_base58": "7KrvcYZuh2cA9yoq7LHUZFMTCzpkmG3Yq4wFCSbj9FhU",
+    "register_goal_tx": null
+  },
+  "accounts": {
+    "creator": "proofee-anton.testnet",
+    "verifier": "verifier.proofee-anton.testnet",
+    "challenger": "proofee-stranger.testnet"
+  },
+  "rpc": "https://rpc.testnet.near.org",
+  "explorer": "https://testnet.nearblocks.io"
+}

@@ -1,0 +1,2 @@
+code_hash (base58 of sha256(contract.wasm)), as returned by RPC view_account:
+4pdqE8BBA9HivuaHTNeV4xjzFYCwtXoPV54GJ8UQnt5T
