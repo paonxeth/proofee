@@ -1,18 +1,19 @@
 {
   "network": "testnet",
-  "status": "TEMPLATE: filled after the testnet run (docs/DEMO_RUN_TREASURY.md)",
+  "status": "deployed and run 2026-11-13 (docs/DEMO_RUN_TREASURY.md)",
   "goal": {
-    "account_id": null,
+    "account_id": "goal-5.proofee-anton.testnet",
     "code_hash_base58": "4pdqE8BBA9HivuaHTNeV4xjzFYCwtXoPV54GJ8UQnt5T",
-    "deploy_tx": null,
+    "deploy_tx": "56MbQQPB4ZVouiZxu1pxzChAdnyPUQPBQmc2CHGGBA2N",
     "access_keys": [],
-    "init_args": null
+    "init_args_file": "scripts/goals/demo-treasury.json (+ treasury), see DEMO_RUN_TREASURY.md step 2"
   },
   "treasury": {
     "account_id": "treasury.proofee-bond-lab-20261112-1794481933490.testnet",
     "interface_version": "proofee-treasury/0.2.0",
     "code_hash_base58": "7KrvcYZuh2cA9yoq7LHUZFMTCzpkmG3Yq4wFCSbj9FhU",
-    "register_goal_tx": null
+    "register_goal_tx": "FTA8LQNnQu3FoupeXzico2TypUr4gXS75iJbYUbPqCFo",
+    "policy_version": "proofee-goal/1.1"
   },
   "accounts": {
     "creator": "proofee-anton.testnet",

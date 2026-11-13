@@ -1,7 +1,7 @@
 # Demo run (plan) — bonded challenges, goal-5.proofee-anton.testnet
 
-Status: **prepared, not run.** Nothing below has been sent. Every command is checked against
-near-cli-rs 0.31.1 (`near --help`). Testnet only.
+Status: **run on 13 Nov 2026, 19:46–19:52 UTC, everything as planned** (log at the end). Every
+command is checked against near-cli-rs 0.31.1 (`near --help`). Testnet only.
 
 All three Treasury outcomes (SPEC 6a) on two milestones:
 
@@ -203,4 +203,30 @@ decide before deploying goal-5.
 
 | # | Step | Signed by | Result | Transaction |
 | --- | --- | --- | --- | --- |
+| 0 | `register_goal` goal-5, policy `proofee-goal/1.1` | proofee-bond-lab-20261112-1794481933490.testnet (Treasury admin) | `get_goal` → `{"authorized":true,"policy_version":"proofee-goal/1.1"}` | [FTA8LQNn…](https://testnet.nearblocks.io/txns/FTA8LQNnQu3FoupeXzico2TypUr4gXS75iJbYUbPqCFo) |
 | 1 | Top up MASTER: 1.2 NEAR | proofee-stranger.testnet | MASTER 2.28 → 3.48, stranger 7.997 → 6.797 | [BAmeoybo…](https://testnet.nearblocks.io/txns/BAmeoyboGvWsEMJp6JkBRGfn9vzHmk4Xr9PMJUXBjMmf) |
+| 2 | Deploy goal-5: create, 3 NEAR, release wasm, `new` with treasury | proofee-anton.testnet | `goal_created`; code_hash network = file `4pdqE8BB…nt5T`; no keys; `get_goal.treasury` set, window 900000 | [56MbQQPB…](https://testnet.nearblocks.io/txns/56MbQQPB4ZVouiZxu1pxzChAdnyPUQPBQmc2CHGGBA2N) |
+| 3a | Fees: 1 NEAR to goal-5 | proofee-stranger.testnet | — | [BKUjgdpV…](https://testnet.nearblocks.io/txns/BKUjgdpVNuSHc6ufJeuzkh2tdgpMKz3Xi9ZyFMksQ7g7) |
+| 3b | `sync` | proofee-stranger.testnet | total_received 1, immediate 0.2, locked 0.8 | [5yvKwpSB…](https://testnet.nearblocks.io/txns/5yvKwpSBRiNQ4jwHuFdS5NyJ4iB1Lse9CHBhEdSkyE3e) |
+| 4 | `submit_proof` 0 (`m1.md`), 19:49:09 UTC | proofee-anton.testnet | Submitted; window to 20:04:09 | [2SJb8hMx…](https://testnet.nearblocks.io/txns/2SJb8hMxrs7CzvyAhLZ5fLRhZr8JnzXh3fctfenfYc9w) |
+| 4a.1 | `prepare_challenge` 0, empty reason | proofee-stranger.testnet | case m0-1 Ready, B = 1 NEAR, F = 0.15; escrow `026a1a1e…`; Treasury `intent_registered` | [HqypaBAS…](https://testnet.nearblocks.io/txns/HqypaBASGyHZFPM5CWaAp74LKeZoUAQdsYBmPga42r2X) |
+| 4a.2 | Treasury `deposit_bond` 1 NEAR | proofee-stranger.testnet | bond Deposited | [cK5XTDDq…](https://testnet.nearblocks.io/txns/cK5XTDDqNZWjwWcbKYaJu74HMvpGnqXNqR5MnUqFFVA) |
+| 4a.3 | `confirm_escrow` 0 | proofee-stranger.testnet | milestone Challenged, case Bound; bond Bound | [9xXnwLxd…](https://testnet.nearblocks.io/txns/9xXnwLxdfLb831kkS8dSHJeFnyFqvKArWZUaDo6oGVqt) |
+| 4a.4 | `qualify` 0 false | verifier.proofee-anton.testnet | milestone **Submitted**, case Settled QualificationRejected; bond **Refunded**; stranger −0.0013 (gas only) | [EgPzisJs…](https://testnet.nearblocks.io/txns/EgPzisJsgadQr6rgV8R5DZGFXJS7cCShJRQLmMXkbaUX) |
+| 4b.1 | `prepare_challenge` 0, "The contract is not verified on-chain" | proofee-stranger.testnet | case m0-2 Ready (attempts 2); escrow `d1bf875d…` | [Gk7RKH91…](https://testnet.nearblocks.io/txns/Gk7RKH91EMoaJFbvt5XwgBeUMQtmZerr4VtQU3N5ugqs) |
+| 4b.2 | Treasury `deposit_bond` 1 NEAR | proofee-stranger.testnet | bond Deposited | [vQ2TnqVQ…](https://testnet.nearblocks.io/txns/vQ2TnqVQRiWDUxiwnEzLeTPE5rs9A2oCtRxZypMUhW7) |
+| 4b.3 | `confirm_escrow` 0 | proofee-stranger.testnet | milestone Challenged, case Bound; bond Bound | [3ysmPXjm…](https://testnet.nearblocks.io/txns/3ysmPXjmQ6H2Kp1UdjSjgRbWyVpN4wAVgNXibLRXcvLr) |
+| 4b.4 | `qualify` 0 true | verifier.proofee-anton.testnet | case Qualified; bond Bound | [CXtr1rQv…](https://testnet.nearblocks.io/txns/CXtr1rQvPrFBrnqG8Y8891knKPCNiviuDFeUNXuYYVge) |
+| 4b.5 | `arbitrate` 0 valid | verifier.proofee-anton.testnet | milestone **Accepted**, case Settled ProofValid; bond **Slashed**; buyback 1 NEAR | [3D5YQZoS…](https://testnet.nearblocks.io/txns/3D5YQZoS2aMMMTkjA6nKeaVnWrmJC27YWqQijqUmqXpK) |
+| 5.1 | `submit_proof` 1 (`m2.md`) | proofee-anton.testnet | Submitted | [GxwyDatf…](https://testnet.nearblocks.io/txns/GxwyDatf9ZzhFow1TYowTqye634qYTmEsLxt2s6otRSS) |
+| 5.2 | `prepare_challenge` 1, "Criterion requires a live URL…" | proofee-stranger.testnet | case m1-1 Ready, F = 0.25, B = 1; escrow `44e4ed8b…` | [GkX2iKTV…](https://testnet.nearblocks.io/txns/GkX2iKTVcv8fWcLbA4f66Jm5qN5Y8sF9k5YNsxxX2Jw5) |
+| 5.3 | Treasury `deposit_bond` 1 NEAR | proofee-stranger.testnet | bond Deposited | [AkUJMpDt…](https://testnet.nearblocks.io/txns/AkUJMpDtPusDoEqUbE445fDeSSginY55XcNPtmwf1wao) |
+| 5.4 | `confirm_escrow` 1 | proofee-stranger.testnet | milestone Challenged, case Bound; bond Bound | [7dXPHLiS…](https://testnet.nearblocks.io/txns/7dXPHLiSHnhVrAd3HbyPAQ5WoJ67tW1o7L3Ap8bfarqV) |
+| 5.5 | `qualify` 1 true | verifier.proofee-anton.testnet | case Qualified | [2RoiAdfv…](https://testnet.nearblocks.io/txns/2RoiAdfvq7jqqNXdRgxF73ghgee8KrGHfrcVd1aum9GE) |
+| 5.6 | `arbitrate` 1 invalid | verifier.proofee-anton.testnet | milestone **Rejected**, case Settled ProofInvalidFinal; bond **Refunded**; stranger −0.0013 (gas only) | [2bYLpXnH…](https://testnet.nearblocks.io/txns/2bYLpXnHKtQ2BvUESrxFnjUbXPBi3RsqeYqaNFL7Ru9S) |
+| 6 | `sync` | proofee-stranger.testnet | total_received **still 1**; unlocked 0.15, forfeited 0.25, pending 0.4, claimable 0.35; buyback 1 NEAR; goal-5 balance 4 NEAR (3 + 1 fees, no bond) | [39j6fazY…](https://testnet.nearblocks.io/txns/39j6fazYgjXX9qCs5mo9svp1N93zA3sW7fGZr3P6LCYe) |
+
+Final state: milestone 0 Accepted (m0-2 ProofValid, bond slashed), milestone 1 Rejected (m1-1
+ProofInvalidFinal, bond refunded), milestone 2 Pending. Treasury: 3 bonds — `026a1a1e…` Refunded,
+`d1bf875d…` Slashed, `44e4ed8b…` Refunded; `get_buyback_balance(goal-5)` = 1 NEAR. Balances after
+the run: stranger 4.7907 (6.797 − 1 fees − 1 slashed − 0.006 gas), MASTER 0.4726, verifier 0.9952.
