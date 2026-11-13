@@ -1,6 +1,8 @@
 // ProoFee goal client: read a goal over NEAR JSON-RPC and build unsigned transactions.
 // No dependencies: fetch, TextEncoder/TextDecoder and crypto.subtle only.
 // Types follow the contract ABI (`cargo near abi` in contracts/goal); spec: docs/SPEC.md.
+/** Stages after which the goal does nothing more with the bond. */
+export const FINAL_CASE_STAGES = ["Settled", "TimeoutRequested", "Orphaned"];
 // ---- Reading ----
 export const TESTNET_RPC_URL = "https://rpc.testnet.near.org";
 export const DEMO_GOAL_ID = "goal-4.proofee-anton.testnet";
@@ -42,7 +44,23 @@ export function getGoal(contractId, options) {
 export function getBalances(contractId, options) {
     return viewFunction(contractId, "get_balances", {}, options);
 }
+/** Treasury bond of a challenge request; null if the Treasury does not know the escrow id. */
+export function getBond(treasuryId, escrowId, options) {
+    return viewFunction(treasuryId, "get_bond", { escrow_id: escrowId }, options);
+}
 // ---- Formatting ----
+/** Account page on testnet NearBlocks. */
+export function nearblocksUrl(accountId) {
+    return `https://testnet.nearblocks.io/address/${encodeURIComponent(accountId)}`;
+}
+/**
+ * Contract time in nanoseconds → milliseconds (for `new Date`). ns values (~1.8e18) exceed
+ * Number.MAX_SAFE_INTEGER, so JSON.parse rounds them by up to a few hundred ns; rounding to the
+ * nearest ms hides that. Fine for display; do not compare ns values for equality.
+ */
+export function nsToMs(ns) {
+    return Math.round(ns / 1000000);
+}
 const YOCTO_DECIMALS = 24;
 /** Exact yoctoNEAR → NEAR as a decimal string: "700000000000000000000000" → "0.7". */
 export function yoctoToNear(yocto) {

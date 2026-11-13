@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import {
   yoctoToNear, balancesToNear, milestoneSharePct, immediateSharePct, sha256Hex, verifySpec,
   viewFunction, syncTx, submitProofTx, challengeTx, finalizeTx, resolveTx, resolveTimeoutTx,
-  expireTx, claimTx, type GoalView, type Milestone,
+  expireTx, claimTx, getGoal, getBond, nearblocksUrl, nsToMs, FINAL_CASE_STAGES,
+  type GoalView, type Milestone, type ChallengeCase,
 } from "../src/index.ts";
 
 const milestone = (weight_bps: number): Milestone => ({
@@ -91,4 +92,52 @@ test("transactions: receiver, method, args, 100 TGas, zero deposit", () => {
       actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit: "0" } }],
     });
   }
+});
+
+// ---- Treasury mode (goal-treasury release) ----
+
+/** Stub RPC: records the request, answers a view call with `result` as JSON bytes. */
+const rpcStub = (result: unknown, seen: { body?: any } = {}) =>
+  (async (_url: string, init: RequestInit) => {
+    seen.body = JSON.parse(String(init.body));
+    const bytes = Array.from(new TextEncoder().encode(JSON.stringify(result)));
+    return new Response(JSON.stringify({ result: { result: bytes } }));
+  }) as unknown as typeof fetch;
+
+test("getBond: calls treasury.get_bond with escrow_id, returns the bond or null", async () => {
+  const bond = { escrow_id: "e1", status: "Slashed", outcome: "SLASH", amount: "1000000000000000000000000" };
+  const seen: { body?: any } = {};
+  const got = await getBond("treasury.testnet", "e1", { fetch: rpcStub(bond, seen) });
+  assert.deepEqual(got, bond);
+  assert.equal(seen.body.params.account_id, "treasury.testnet");
+  assert.equal(seen.body.params.method_name, "get_bond");
+  assert.deepEqual(JSON.parse(atob(seen.body.params.args_base64)), { escrow_id: "e1" });
+  assert.equal(await getBond("treasury.testnet", "missing", { fetch: rpcStub(null) }), null);
+});
+
+test("getGoal: old goals (no treasury fields) and treasury goals both parse", async () => {
+  const old = { milestones: [milestone(10000)] };
+  const g4 = await getGoal("goal-4.testnet", { fetch: rpcStub(old) });
+  assert.equal(g4.treasury ?? null, null);
+  assert.equal(g4.milestones[0].case ?? null, null);
+
+  const c: ChallengeCase = {
+    proof_id: "0:aa:2", case_id: "m0-2", payer: "c.testnet", reason: "fake", fee_snapshot: "0",
+    amount: "1000000000000000000000000", reward_cap: "0", deposit_until_ns: 1, bind_until_ns: 2,
+    refund_after_ns: 3, escrow_id: "e2", stage: "Settled", decision: "ProofValid", nonce: 4,
+  };
+  const g5 = await getGoal("goal-5.testnet", {
+    fetch: rpcStub({ treasury: "t.testnet", milestones: [{ ...milestone(10000), challenge_attempts: 2, case: c }] }),
+  });
+  assert.equal(g5.treasury, "t.testnet");
+  assert.deepEqual(g5.milestones[0].case, c);
+  assert.ok(FINAL_CASE_STAGES.includes(g5.milestones[0].case!.stage));
+});
+
+test("nearblocksUrl and nsToMs", () => {
+  assert.equal(nearblocksUrl("goal-5.proofee-anton.testnet"),
+    "https://testnet.nearblocks.io/address/goal-5.proofee-anton.testnet");
+  assert.equal(nsToMs(1_794_481_933_490_000_000), 1_794_481_933_490);
+  assert.equal(nsToMs(1_999_999), 2);
+  assert.deepEqual([...FINAL_CASE_STAGES], ["Settled", "TimeoutRequested", "Orphaned"]);
 });

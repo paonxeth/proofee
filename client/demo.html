@@ -21,6 +21,11 @@
     code { font-size: 13px; word-break: break-all; }
     .scroll { overflow-x: auto; }
     a { color: inherit; }
+    tr.case > td { border-bottom: 1px solid var(--line); padding: 0 8px 12px 32px; }
+    tr.has-case > td { border-bottom: none; }
+    .case table { width: auto; font-size: 14px; }
+    .case th, .case td { border-bottom: none; padding: 2px 12px 2px 0; }
+    .case td:first-child { color: var(--muted); white-space: nowrap; }
   </style>
 </head>
 <body>
@@ -42,7 +47,8 @@
 
   <script type="module">
     import {
-      DEMO_GOAL_ID, getGoal, getBalances, balancesToNear, immediateSharePct, milestoneSharePct, verifySpec,
+      DEMO_GOAL_ID, getGoal, getBalances, getBond, balancesToNear, immediateSharePct, milestoneSharePct,
+      verifySpec, yoctoToNear, nearblocksUrl, nsToMs, FINAL_CASE_STAGES,
     } from "./dist/index.js";
 
     // ?goal=<account> to show another goal, ?rpc=<url> for another endpoint.
@@ -76,13 +82,53 @@
       return tr;
     };
     const utc = (ms) => (ms ? new Date(ms).toISOString().replace("T", " ").slice(0, 16) + " UTC" : "—");
+    const utcNs = (ns) => (ns ? new Date(nsToMs(ns)).toISOString().replace("T", " ").slice(0, 19) + " UTC" : "—");
+    const account = (id) => (id ? link(nearblocksUrl(id), id) : "—");
+    const RETRYABLE = ["RegisterRetryable", "BindRetryable", "DecisionRetryable", "SettlementRetryable"];
+    const stageKind = (stage) =>
+      FINAL_CASE_STAGES.includes(stage) ? "final" : RETRYABLE.includes(stage) ? "retryable" : "in progress";
+
+    // Bonded challenge request of a milestone (treasury mode) with its Treasury bond.
+    function caseTable(c, attempts, bond) {
+      const t = el("table");
+      let bondCell;
+      if (!c.escrow_id) bondCell = "not registered yet";
+      else if (bond instanceof Error) bondCell = el("span", `get_bond failed: ${bond.message}`, "bad");
+      else if (bond === null) bondCell = "unknown to the Treasury";
+      else {
+        const st = bond.status ?? "intent only (not deposited)";
+        bondCell = el("span", bond.outcome ? `${st} (${bond.outcome})` : st,
+          bond.status === "Slashed" ? "bad" : bond.status === "Refunded" ? "ok" : "");
+      }
+      t.append(
+        row([`Request ${c.case_id}`, `attempt ${attempts ?? "?"}`], true),
+        row(["Stage", `${c.stage} — ${stageKind(c.stage)}`]),
+        row(["Challenger", account(c.payer)]),
+        row(["Reason", c.reason || "(empty)"]),
+        row(["Bond", `${yoctoToNear(c.amount)} NEAR (fees at stake ${yoctoToNear(c.fee_snapshot)} NEAR)`]),
+        row(["Deposit until", utcNs(c.deposit_until_ns)]),
+        row(["Bind until", utcNs(c.bind_until_ns)]),
+        row(["Verifier deadline", utcNs(c.refund_after_ns)]),
+        row(["Decision", c.decision ?? "—"]),
+        row(["Bond in Treasury", bondCell]),
+        row(["Escrow id", c.escrow_id ? el("code", c.escrow_id) : "—"]),
+      );
+      return t;
+    }
 
     async function main() {
       const opts = { rpcUrl };
       const [goal, balances] = await Promise.all([getGoal(goalId, opts), getBalances(goalId, opts)]);
 
       $("title").textContent = goal.goal_title;
-      $("account").append("Contract ", link(`https://testnet.nearblocks.io/address/${goalId}`, goalId));
+      $("account").append("Contract ", account(goalId));
+      if (goal.treasury) $("account").append(" · Treasury ", account(goal.treasury));
+
+      // Treasury bonds of all requests, in parallel; a failed read is shown per milestone.
+      const bonds = await Promise.all(goal.milestones.map((m) =>
+        goal.treasury && m.case?.escrow_id
+          ? getBond(goal.treasury, m.case.escrow_id, opts).catch((e) => e)
+          : null));
 
       $("params").append(
         row(["Creator", goal.creator]),
@@ -91,15 +137,28 @@
         row(["Challenge window", `${goal.challenge_window_ms / 1000} s`]),
         row(["Goal spec", link(goal.goal_uri)]),
       );
+      if (goal.treasury) {
+        $("params").append(row(["Bond Treasury", account(goal.treasury)]));
+      }
 
       const ms = $("milestones");
       ms.append(row(["#", "Milestone", "Share of all fees", "Status", "Deadline", "Proof", "Challenge"], true));
       goal.milestones.forEach((m, i) => {
-        const challenge = m.challenger ? `${m.challenger}: ${m.challenge_reason ?? ""}` : "—";
+        const reason = m.challenge_reason ?? m.case?.reason ?? "";
+        const challenge = m.challenger ? `${m.challenger}: ${reason}` : "—";
         const status = el("span", m.status,
           m.status === "Accepted" ? "ok" : m.status === "Rejected" || m.status === "Failed" ? "bad" : "");
         ms.append(row([String(i + 1), m.title, `${milestoneSharePct(m, goal.immediate_bps)}%`, status,
           utc(m.deadline_ms), m.proof_uri ? link(m.proof_uri, "proof") : "—", challenge]));
+        if (goal.treasury && m.case) {
+          ms.lastChild.className = "has-case";
+          const tr = el("tr", null, "case");
+          const td = el("td");
+          td.colSpan = 7;
+          td.append(caseTable(m.case, m.challenge_attempts, bonds[i]));
+          tr.append(td);
+          ms.append(tr);
+        }
       });
 
       const b = balancesToNear(balances);

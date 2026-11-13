@@ -51,6 +51,34 @@ spec.content;   // the spec file as text
 - On-chain strings (titles, proof links, challenge reasons) are written by users: render them as
   text, and only link `http(s)` URLs.
 
+## Bonded challenges (goals with a Bond Treasury)
+
+A goal deployed with a treasury (release `goal-treasury`, SPEC 6a) returns `treasury` in
+`get_goal`, and each milestone has `challenge_attempts` and `case` — the latest bonded challenge
+request. Older goals (goal-4) have none of these fields: they are optional in the types.
+
+```ts
+import { getGoal, getBond, yoctoToNear, nsToMs, nearblocksUrl, FINAL_CASE_STAGES } from "@proofee/client";
+
+const goal = await getGoal("goal-5.proofee-anton.testnet");
+for (const m of goal.milestones) {
+  const c = m.case;
+  if (!goal.treasury || !c) continue;
+  c.stage;                            // "Bound", "Settled", ... (FINAL_CASE_STAGES: nothing more happens)
+  yoctoToNear(c.amount);              // bond, NEAR
+  new Date(nsToMs(c.refund_after_ns)); // verifier deadline
+  const bond = c.escrow_id ? await getBond(goal.treasury, c.escrow_id) : null;
+  bond?.status;                       // "Deposited" | "Bound" | "Refunded" | "Slashed" | ... ; null: intent only
+}
+nearblocksUrl(goal.treasury!);        // https://testnet.nearblocks.io/address/<treasury>
+```
+
+Contract times in a case are nanoseconds and exceed `Number.MAX_SAFE_INTEGER`; `nsToMs` rounds
+to the nearest millisecond; do not compare raw ns values. The case `stage` is the goal's view;
+the bond's money outcome is `getBond(...).status`. Stages, errors and who acts next:
+[../release/goal-treasury/errors-events.md](../release/goal-treasury/errors-events.md). The client
+builds no bonded-challenge transactions yet (read-only).
+
 ## Build transactions
 
 Each function returns `{ receiverId, actions: [FunctionCall] }` with 100 TGas and a zero deposit —
@@ -80,18 +108,21 @@ as `"Only creator"` or `"Window still open"` (SPEC 7).
 ## Demo page
 
 `demo.html` reads `goal-4.proofee-anton.testnet` and shows the goal, milestones with statuses and
-shares, balances and the spec hash check. ES modules and `crypto.subtle` need a local server:
+shares, balances and the spec hash check. For a goal with a treasury it also links the Treasury on
+NearBlocks and shows under each milestone its bonded request: stage, challenger, bond, deadlines,
+decision and the bond status from `treasury.get_bond`. Read-only. ES modules and `crypto.subtle` need a local server:
 
 ```sh
 cd client
 python3 -m http.server 8000
 # open http://localhost:8000/demo.html
 # another goal: http://localhost:8000/demo.html?goal=<account>.testnet
+# bonded challenges: http://localhost:8000/demo.html?goal=goal-5.proofee-anton.testnet
 ```
 
 ## Tests
 
 ```sh
-npm test            # offline: formatting, shares, transactions, spec check with a stub fetch
+npm test            # offline: formatting, shares, transactions, spec check, get_bond, old/new get_goal
 npm run test:live   # read-only: goal-4 on testnet must match docs/DEMO_RUN.md
 ```
