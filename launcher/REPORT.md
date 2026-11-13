@@ -1,26 +1,26 @@
 # ProoFee Launcher + LP Locker — Testnet E2E
 
-Дата: 12 ноября 2026. Только NEAR Testnet. P0 и on-chain проверки P1 выполнены.
-Это MVP без независимого аудита, не готовый Mainnet deployment.
+Date: 12 November 2026. NEAR Testnet only. P0 and the on-chain P1 checks are done.
+This is an MVP without an independent audit, not a ready Mainnet deployment.
 
-## Реализовано
+## Implemented
 
-Последовательный Node.js Launcher на основе проверенного PoC, отдельный Rust Locker
-на каждый токен, NEP-141 без дополнительной эмиссии, pool token/wrap.testnet fee=10000,
-HotZap всего initial supply, Buy/Sell, LP fee collection, конвертация token fee в wNEAR,
-точный unwrap, native NEAR в новый Goal, sync и Creator Claim.
-Это CLI/library orchestration, не многоарендный on-chain Factory и не размещённый web API.
-Существующий Goal и Treasury не изменены. Goal WASM собран из исходника основного
-репозитория без изменений и развёрнут на новом изолированном аккаунте.
+A sequential Node.js Launcher based on the verified PoC, a separate Rust Locker
+per token, NEP-141 without additional minting, pool token/wrap.testnet fee=10000,
+HotZap of the entire initial supply, Buy/Sell, LP fee collection, conversion of the token fee to wNEAR,
+exact unwrap, native NEAR into a new Goal, sync and Creator Claim.
+This is CLI/library orchestration, not a multi-tenant on-chain Factory and not a hosted web API.
+The existing Goal and Treasury are not changed. The Goal WASM was built from the source of the main
+repository without changes and deployed to a new isolated account.
 
-## Аккаунты и позиция
+## Accounts and position
 
-| Назначение | ID |
+| Purpose | ID |
 |---|---|
 | Isolated root / creator | `pf-launch-mwdyyhj0.testnet` |
 | Token | `token-e2e1.pf-launch-mwdyyhj0.testnet` |
 | Locker / LP owner | `lock-e2e1.pf-launch-mwdyyhj0.testnet` |
-| Новый Goal | `goal-e2e1.pf-launch-mwdyyhj0.testnet` |
+| New Goal | `goal-e2e1.pf-launch-mwdyyhj0.testnet` |
 | Permissionless caller | `caller.pf-launch-mwdyyhj0.testnet` |
 | DCL | `dclv2.ref-dev.testnet` |
 | wNEAR | `wrap.testnet` |
@@ -29,93 +29,93 @@ Pool: `token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000`.
 
 LPT: `token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000#2583`.
 
-Token decimals=18, supply=1000000000000000000000000000 raw = 1 000 000 000 токенов.
-Init=-69400, range=[-69200,-59400], без начального wNEAR. LP создаётся сразу от Locker.
+Token decimals=18, supply=1000000000000000000000000000 raw = 1 000 000 000 tokens.
+Init=-69400, range=[-69200,-59400], no initial wNEAR. The LP is created directly by the Locker.
 
-В DCL отправлен весь supply; непосредственно в LP попало 999999999.99999999999987968
-токена. Остаток 120320 raw = 0.00000000000012032
-токена — DCL integer-rounding principal dust, постоянно остающийся на внутреннем
-балансе Locker и исключённый из сборов. Строгое «каждая raw unit находится в LP»
-не выполнено из-за округления DCL; этот остаток не называется LP-ликвидностью.
+The whole supply was sent to DCL; 999999999.99999999999987968 tokens went directly into the LP.
+The remainder of 120320 raw = 0.00000000000012032
+tokens is DCL integer-rounding principal dust that permanently stays on the Locker's internal
+balance and is excluded from collections. The strict "every raw unit is in the LP"
+is not met because of DCL rounding; this remainder is not called LP liquidity.
 
-## Проверенный lock
+## Verified lock
 
-У Token, Locker и Goal нулевые списки access keys. Code hash каждого совпал с
-поставленным WASM; детали в evidence/onchain-final.json. У Locker нет метода upgrade,
-положительного remove_liquidity, произвольного вызова, NFT transfer/approval,
-изменения Goal или вывода всего native-баланса.
+Token, Locker and Goal have empty access key lists. The code hash of each matched the
+deployed WASM; details in evidence/onchain-final.json. The Locker has no upgrade method,
+no positive remove_liquidity, no arbitrary call, no NFT transfer/approval,
+no Goal change and no withdrawal of the whole native balance.
 
-DCL owner_id позиции = Locker. Principal liquidity amount до и после всех сделок и
-трёх collect-циклов: `4057331146356777986151`. Creator и deployment root не смогли вывести
-principal. Попытка deployment root переустановить тот же WASM на keyless Locker
-отклонена NEAR. Зависимость от администрирования и обновлений внешнего DCL сохраняется.
+DCL owner_id of the position = Locker. Principal liquidity amount before and after all trades and
+three collect cycles: `4057331146356777986151`. The creator and the deployment root could not withdraw
+the principal. An attempt by the deployment root to redeploy the same WASM on the keyless Locker
+was rejected by NEAR. Dependence on the administration and upgrades of the external DCL remains.
 
-## Комиссии и Goal
+## Fees and the Goal
 
-После первоначальных Buy/Sell:
+After the initial Buy/Sell:
 
-| Актив | Общая swap fee | Protocol fee DCL | Комиссия нашей LP |
+| Asset | Total swap fee | DCL protocol fee | Our LP fee |
 |---|---:|---:|---:|
 | Token, raw | 482234820568394840715492 | 96446964113678968143098 | 385787856454715872572393 |
 | wNEAR, raw | 1000000000000000000000 | 200000000000000000000 | 799999999999999999999 |
 
-Protocol доля = 20% swap fee, LP около 80%; ещё по 1 raw unit приходится на округление.
-В этом deployment pool.total_fee_*_charged совпадает с protocol_fee события swap;
-это не вся комиссия пула и не доход ProoFee. Доли подтверждены событиями, а не именем поля.
+The protocol share = 20% of the swap fee, the LP about 80%; 1 more raw unit each goes to rounding.
+In this deployment pool.total_fee_*_charged equals protocol_fee of the swap event;
+it is not the whole pool fee and not ProoFee income. The shares are confirmed by events, not by the field name.
 
-Token-комиссия LP: 385787.856454715872572393 токена. wNEAR-комиссия LP:
-0.000799999999999999999999 wNEAR. Swap event первой fee-конвертации сообщает
-amount_in=385787856454715872572383, на 10 raw units
-меньше переданной FT-суммы; эта DCL-особенность округления сохранена в evidence,
-не объявляется дополнительным доходом или подтверждённым refund.
-Финальная wallet token balance Locker = 0; DCL internal assets = исходный principal dust.
+LP token fee: 385787.856454715872572393 tokens. LP wNEAR fee:
+0.000799999999999999999999 wNEAR. The swap event of the first fee conversion reports
+amount_in=385787856454715872572383, 10 raw units
+less than the transferred FT amount; this DCL rounding quirk is kept in the evidence,
+and is not declared as additional income or a confirmed refund.
+Final Locker wallet token balance = 0; DCL internal assets = the original principal dust.
 
-Первый цикл доставил в Goal ровно **0.001191987982122365775599 NEAR**:
-фактический wNEAR-выход fee swap плюс отдельная wNEAR LP fee. После sync Goal начислил
-20% immediate, 80% milestones; первый Creator Claim = **0.000238397596424473155119 NEAR**.
+The first cycle delivered exactly **0.001191987982122365775599 NEAR** to the Goal:
+the actual wNEAR output of the fee swap plus the separate wNEAR LP fee. After sync the Goal accrued
+20% immediate, 80% milestones; the first Creator Claim = **0.000238397596424473155119 NEAR**.
 
-После повторного collect и permissionless collect от другого аккаунта, финальных sync/claim:
+After a repeated collect and a permissionless collect from another account, final sync/claim:
 
-| Показатель | NEAR |
+| Metric | NEAR |
 |---|---:|
-| Доставлено Locker / учтено Goal | 0.0011951483583858763164 |
-| Immediate 20%, выплачено creator | 0.00023902967167717526328 |
+| Delivered by the Locker / counted by the Goal | 0.0011951483583858763164 |
+| Immediate 20%, paid to the creator | 0.00023902967167717526328 |
 | Locked milestones 80% | 0.00095611868670870105312 |
 | Unsynced / claimable | 0 / 0 |
 
-Повторные collect получают новые комиссии от предыдущих fee-conversion trades.
-Это не повторная выплата исходного дохода: сверены новые unclaimed_fee и отдельные
-wNEAR settlement amounts. В LP остаётся небольшая новая token fee от последней
-конвертации: 197523382504814527 raw, ещё не собранная и не записанная как native income.
+Repeated collects receive new fees from the previous fee-conversion trades.
+This is not a repeated payout of the original income: the new unclaimed_fee and the separate
+wNEAR settlement amounts were reconciled. A small new token fee from the last
+conversion stays in the LP: 197523382504814527 raw, not yet collected and not recorded as native income.
 
-## Проверки и ошибки
+## Checks and errors
 
-14 unit-тестов, 25 проверок evidence прошли. Финальность: 62/62 включённых транзакций FINAL,
-54 успешных, 8 неудачных. Неудачные: исходный недостаточный storage deposit нового Goal
-(атомарный откат, затем успешный запуск с 2.1 NEAR) и 7 отрицательных тестовых транзакций,
-включая повтор проверки запрета parent upgrade. На существующий goal-4 не отправлялось операций.
+14 unit tests and 25 evidence checks passed. Finality: 62/62 included transactions FINAL,
+54 successful, 8 failed. Failed: the initial insufficient storage deposit of the new Goal
+(atomic rollback, then a successful launch with 2.1 NEAR) and 7 negative test transactions,
+including a repeat of the parent-upgrade ban check. No operations were sent to the existing goal-4.
 
-Негативные проверки: отсутствие principal-withdraw и goal-setter в Locker;
-private callback от постороннего; DCL remove_liquidity от не-владельца;
-parent deploy без ключей; чужой claim. Посторонний caller выполнил collect с лишними
-receiver_id/goal_id: они не изменили immutable Goal, caller получил только расход газа.
+Negative checks: absence of principal-withdraw and goal-setter in the Locker;
+a private callback from an outsider; DCL remove_liquidity from a non-owner;
+a parent deploy without keys; someone else's claim. An outside caller ran collect with extra
+receiver_id/goal_id: they did not change the immutable Goal, the caller only spent gas.
 
-Отдельно от включённых транзакций:
-- Одна попытка отклонена до включения: недостаточно баланса caller для резерва 300 TGas.
-- Одна подписанная попытка получила RPC 429 на deprecated rpc.testnet.near.org и не была
-  включена. Не-включение подтверждено: тот же signer/public key/nonce позже потреблён
-  другой FINAL-транзакцией. Доказательство — evidence/superseded-transactions.json.
+Separately from the included transactions:
+- One attempt was rejected before inclusion: the caller's balance was insufficient for the 300 TGas reserve.
+- One signed attempt got RPC 429 on the deprecated rpc.testnet.near.org and was not
+  included. Non-inclusion is confirmed: the same signer/public key/nonce was later consumed
+  by another FINAL transaction. Proof — evidence/superseded-transactions.json.
 
-Переключение RPC и продолжение с сохранённого on-chain этапа не выпускали supply повторно.
-В клиент добавлены ожидание FINAL и проверка chain_id=testnet перед подписью.
+Switching the RPC and resuming from the saved on-chain stage did not mint the supply again.
+Waiting for FINAL and a chain_id=testnet check before signing were added to the client.
 
-Суммарно tokens_burnt всех 62 транзакций, включая faucet и negative tests:
-**0.0891601768188389 NEAR**. Это газ, не deployment/storage funding,
-и не gas limit 300 TGas. Пооперационная детализация — evidence/transactions.csv.
+Total tokens_burnt of all 62 transactions, including faucet and negative tests:
+**0.0891601768188389 NEAR**. This is gas, not deployment/storage funding,
+and not the 300 TGas gas limit. Per-operation breakdown — evidence/transactions.csv.
 
-## Основные транзакции
+## Main transactions
 
-| Операция | Testnet transaction |
+| Operation | Testnet transaction |
 |---|---|
 | create-token | [41AvUu6eWBYEhv1FiEajii3GRrjq2WqFo7LoZjfaxqGr](https://testnet.nearblocks.io/txns/41AvUu6eWBYEhv1FiEajii3GRrjq2WqFo7LoZjfaxqGr) |
 | create-locker | [9udHWdV2DxjUW4eS2Ljp7Ffz7We1zSNSWvaB9URQW2BX](https://testnet.nearblocks.io/txns/9udHWdV2DxjUW4eS2Ljp7Ffz7We1zSNSWvaB9URQW2BX) |
@@ -129,23 +129,23 @@ receiver_id/goal_id: они не изменили immutable Goal, caller пол�
 | negative-parent-upgrade | [1aTfJ1tzGTEVQB3JVkAJgu92JJ7MWzUiZEL2PCKvP2w](https://testnet.nearblocks.io/txns/1aTfJ1tzGTEVQB3JVkAJgu92JJ7MWzUiZEL2PCKvP2w) |
 | negative-stranger-claim | [2mALkQhjZXgeN1c8NH5kqaxnVjcKBk1SibSkL5yfjkPa](https://testnet.nearblocks.io/txns/2mALkQhjZXgeN1c8NH5kqaxnVjcKBk1SibSkL5yfjkPa) |
 
-Полный перечень — evidence/final-transactions.json и transactions.csv. Все raw RPC,
-child receipt outcomes, balances и подписи транзакций доступны в release archive
-в full-evidence/. Приватных signing keys там нет.
+Full list — evidence/final-transactions.json and transactions.csv. All raw RPC,
+child receipt outcomes, balances and transaction signatures are available in the release archive
+in full-evidence/. There are no private signing keys there.
 
-## Ограничения и передача
+## Limitations and handoff
 
-- Locker immutable/keyless. При неоднозначной state-changing receipt или потерянном
-  callback он останавливается без admin-reset; восстановление всех таких случаев не
-  гарантировано. Известные read/pay failures и полностью возвращённый seed/swap допускают retry.
-- Fee swap имеет 1% floor от текущей DCL quote, без oracle/MEV-защиты.
-- Целый supply отправлен в DCL, но математическое округление оставляет указанный locked dust.
-- Launcher — CLI/library; frontend/backend service не развёрнут. Handoff описывает интеграцию.
-- Второй PoC-архив недоступен. Использованы первый архив и действующий Goal ABI из репозитория.
-- Ветка локальная `feat/testnet-launcher-locker`. GitHub подключение предоставляет pull=true,
-  push=false; удалённая ветка/PR не созданы. Патч добавляет только launcher/.
-- Сгенерированные Testnet signer-файлы находятся вне репозитория и release; их нужно сохранить
-  в секретном хранилище для будущего Creator Claim. Значения ключей не публикуются.
+- The Locker is immutable/keyless. On an ambiguous state-changing receipt or a lost
+  callback it stops without an admin reset; recovery of all such cases is not
+  guaranteed. Known read/pay failures and a fully returned seed/swap allow a retry.
+- The fee swap has a 1% floor from the current DCL quote, without oracle/MEV protection.
+- The whole supply was sent to DCL, but mathematical rounding leaves the locked dust stated above.
+- The Launcher is a CLI/library; no frontend/backend service is deployed. The handoff describes the integration.
+- The second PoC archive is unavailable. The first archive and the current Goal ABI from the repository were used.
+- The branch `feat/testnet-launcher-locker` is local. The GitHub connection grants pull=true,
+  push=false; no remote branch/PR was created. The patch adds only launcher/.
+- The generated Testnet signer files are outside the repository and the release; they must be kept
+  in secret storage for a future Creator Claim. Key values are not published.
 
-Запуск, ABI и frontend инструкции: README.md, INTEGRATION_HANDOFF.md, abi/.
-Происхождение и хеши WASM: SOURCE_PROVENANCE.json. Treasury и рабочие team accounts не затронуты.
+Run, ABI and frontend instructions: README.md, INTEGRATION_HANDOFF.md, abi/.
+WASM provenance and hashes: SOURCE_PROVENANCE.json. Treasury and the working team accounts are not affected.

@@ -1,41 +1,41 @@
-# План: подключение contracts/goal к Bond Treasury v0.2.0
+# Plan: connecting contracts/goal to Bond Treasury v0.2.0
 
-Согласовано 2026-11-13. Ветка `feat/goal-treasury`.
+Agreed 2026-11-13. Branch `feat/goal-treasury`.
 
-## Контекст
+## Context
 
-Сейчас challenge бесплатный: любой может заблокировать этап на 24 ч. Treasury v0.2.0 (`bond-treasury/`) уже развёрнут как отдельный контракт с бондом, slash в buyback reserve и нейтральным возвратом по таймауту. Goal должен научиться с ним работать: оркестрацию переносим из `bond-treasury/contracts/mock_goal/src/lib.rs`, заменяя admin на verifier/челленджера. Награды (fund_reward/pay_reward) не делаем, учёт sync/claim не трогаем.
+Today a challenge is free: anyone can block a milestone for 24 h. Treasury v0.2.0 (`bond-treasury/`) is already deployed as a separate contract with a bond, slash to the buyback reserve and neutral refund on timeout. The goal must learn to work with it: we port the orchestration from `bond-treasury/contracts/mock_goal/src/lib.rs`, replacing the admin with the verifier/challenger. Rewards (fund_reward/pay_reward) are not built; sync/claim accounting is not touched.
 
-Найдено при чтении:
-- Treasury: `register_intent` проверяет `B = clamp(F/5, 1N, 5N)`, `R = min(F/10, B/2, 2N)` и `now < deposit_until < bind_until < refund_after`; `settle_bond`/`authorize_decision` работают только при `now < refund_after`; `refund_expired` (кто угодно) — Deposited после `bind_until` или Bound после `refund_after` → NeutralRefund. Повтор settle с тем же id — no-op, конфликт — panic.
-- Treasury `new` требует суффикс `.testnet` → в песочнице нужен genesis-аккаунт `testnet` (`SandboxConfig.additional_accounts`, near-sandbox 0.4).
-- `release/bond_treasury.wasm` совпадает с SHA256SUMS (5dfb0699…).
-- Тестов сейчас 80 в lib.rs + 3 в math.rs = 83 юнит, 3 интеграционных.
+Found while reading:
+- Treasury: `register_intent` checks `B = clamp(F/5, 1N, 5N)`, `R = min(F/10, B/2, 2N)` and `now < deposit_until < bind_until < refund_after`; `settle_bond`/`authorize_decision` work only while `now < refund_after`; `refund_expired` (anyone) — Deposited after `bind_until` or Bound after `refund_after` → NeutralRefund. Repeating settle with the same id is a no-op, a conflict panics.
+- Treasury `new` requires the `.testnet` suffix → the sandbox needs a genesis account `testnet` (`SandboxConfig.additional_accounts`, near-sandbox 0.4).
+- `release/bond_treasury.wasm` matches SHA256SUMS (5dfb0699…).
+- Tests today: 80 in lib.rs + 3 in math.rs = 83 unit, 3 integration.
 
-## 1. Состояние
+## 1. State
 
 ```rust
-pub struct Goal { ...; treasury: Option<AccountId> }          // задаётся в new, не меняется
+pub struct Goal { ...; treasury: Option<AccountId> }          // set in new, never changes
 
 pub struct Milestone { ...;
-    challenge_attempts: u32,              // счётчик заявок → уникальные proof_id/case_id
-    case: Option<ChallengeCase>,          // текущая (последняя) заявка с бондом
+    challenge_attempts: u32,              // request counter → unique proof_id/case_id
+    case: Option<ChallengeCase>,          // current (latest) bonded request
 }
 
 pub struct ChallengeCase {
     proof_id: String,      // "{index}:{proof_hash}:{attempt}"
-    case_id: String,       // "m{index}-{attempt}"  (≤121 байт)
-    payer: AccountId,      // челленджер
-    reason: String,        // хранится ТОЛЬКО здесь; в режиме Treasury milestone.challenge_reason = None
-                           // (поле этапа используется только бесплатным challenge)
+    case_id: String,       // "m{index}-{attempt}"  (≤121 bytes)
+    payer: AccountId,      // the challenger
+    reason: String,        // stored ONLY here; in Treasury mode milestone.challenge_reason = None
+                           // (the milestone field is used only by the free challenge)
     fee_snapshot: U128,    // F
     amount: U128,          // B
-    reward_cap: U128,      // R (только для Treasury, наград не платим)
+    reward_cap: U128,      // R (for the Treasury only, we pay no rewards)
     deposit_until_ns, bind_until_ns, refund_after_ns: u64,
     escrow_id: Option<String>,
     stage: CaseStage,
     decision: Option<Decision>,
-    nonce: u64,            // защита колбэков от устаревших результатов (в Mock — attempt)
+    nonce: u64,            // protects callbacks from stale results (attempt in the Mock)
 }
 
 enum CaseStage { RegisterPending, RegisterRetryable, Ready, VerifyPending, BindPending,
@@ -43,97 +43,97 @@ enum CaseStage { RegisterPending, RegisterRetryable, Ready, VerifyPending, BindP
     SettlementPending, SettlementRetryable, Settled, TimeoutRequested, Orphaned }
 ```
 
-Сроки (константы, при `prepare_challenge` в момент `t0`, всё в ns, `ms × 1_000_000` через `checked_mul`):
-- `deposit_until = t0 + 10 мин`, `bind_until = t0 + 20 мин`,
-- `refund_after = bind_until + RESOLVE_TIMEOUT_MS (24 ч)`.
-- Для этапа в режиме Treasury дедлайн решения = `refund_after` (а не `challenged_at + 24 ч`). Так у verifier всегда ≥ 24 ч после привязки, и граница Goal совпадает с границей Treasury: до неё работают `qualify/arbitrate`, после — только таймаут.
+Deadlines (constants, at `prepare_challenge` at time `t0`, all in ns, `ms × 1_000_000` via `checked_mul`):
+- `deposit_until = t0 + 10 min`, `bind_until = t0 + 20 min`,
+- `refund_after = bind_until + RESOLVE_TIMEOUT_MS (24 h)`.
+- For a milestone in Treasury mode the decision deadline = `refund_after` (not `challenged_at + 24 h`). This way the verifier always has ≥ 24 h after binding, and the goal's boundary coincides with the Treasury's: before it `qualify/arbitrate` work, after it only the timeout.
 
-**F** = `L × weight_bps / 10000`, где `L` — locked из SPEC 5.2 по `total_received` после `sync()` в `prepare_challenge`. Если идёт выплата (`payout_in_flight`), sync пропускается и берётся уже учтённое — это и есть «учтённые фисы на момент спора». B и R — ровно формулы Treasury (иначе `ECONOMICS`).
+**F** = `L × weight_bps / 10000`, where `L` is locked from SPEC 5.2 by `total_received` after `sync()` in `prepare_challenge`. If a payout is in flight (`payout_in_flight`), sync is skipped and the already counted amount is used — this is exactly the "fees counted at the time of the dispute". B and R are exactly the Treasury formulas (otherwise `ECONOMICS`).
 
-## 1a. Резерв хранения (обязательно)
+## 1a. Storage reserve (mandatory)
 
-Проблема: case на каждом этапе (reason до 280 символов, id, сроки) — рост состояния за счёт контракта. `claim` оставляет только `STORAGE_RESERVE_BYTES`; если рост больше, после полного claim `prepare_challenge` упадёт с `LackBalanceForState`, и креатор фактически отключит споры.
+Problem: a case on every milestone (reason up to 280 characters, ids, deadlines) is state growth at the contract's expense. `claim` leaves only `STORAGE_RESERVE_BYTES`; if the growth is larger, after a full claim `prepare_challenge` fails with `LackBalanceForState`, and the creator effectively disables disputes.
 
-Что делаю:
-- Рост ограничен сверху: на этап хранится одна (последняя) заявка, новая перезаписывает старую; reason хранится один раз (в case); `challenger` этапа заполняется только при bind.
-- Замер в песочнице (шаг 4, первый тест): goal с 5 этапами, все строки на пределе (title 100, uri 256, reason 280 символов, многобайтные UTF-8 — лимиты в символах, байт больше), Treasury с максимальными F → `storage_usage` до и после: prepare на всех 5 этапах → bind → отказ квалификации → новая заявка на каждом этапе. Максимум роста фиксирую в тесте.
-- `claim` уже оставляет `storage_usage + STORAGE_RESERVE_BYTES` (`storage_cost_with_reserve`), т.е. текущее состояние и код покрыты. Резерв покрывает только рост сверх этого: `STORAGE_RESERVE_BYTES ≥ 1,5 × измеренный рост` (округлённо, не меньше текущих 16000). Минимальный депозит в `new` остаётся `storage + 2 × STORAGE_RESERVE_BYTES`. Если окажется, что ограничения reason надо ужать — сначала спрошу.
-- После сборки проверяю, что 3 NEAR в `scripts/deploy-testnet.sh` покрывают новый минимум (wasm вырастет); если нет — поднимаю и пишу, сколько.
-- Тесты: (а) песочница — creator делает полный `claim`, после этого весь худший сценарий (5 prepare → bind → отказ → 5 новых prepare) проходит без `LackBalanceForState`, и `рост ≤ STORAGE_RESERVE_BYTES`; (б) юнит — `new` отклоняет депозит на 1 yocto меньше нового минимума и принимает ровно минимум (обновлённый `MIN_DEPOSIT_YOCTO`).
-- SPEC §3 и §5.3: новое число байт и ≈NEAR, обоснование замером.
+What I do:
+- Growth is bounded from above: one (latest) request is stored per milestone, a new one overwrites the old one; reason is stored once (in the case); the milestone's `challenger` is filled only at bind.
+- Measurement in the sandbox (step 4, first test): a goal with 5 milestones, all strings at the limit (title 100, uri 256, reason 280 characters, multibyte UTF-8 — limits are in characters, bytes are more), Treasury with maximum F → `storage_usage` before and after: prepare on all 5 milestones → bind → qualification rejection → a new request on every milestone. The maximum growth is pinned in the test.
+- `claim` already leaves `storage_usage + STORAGE_RESERVE_BYTES` (`storage_cost_with_reserve`), i.e. the current state and code are covered. The reserve covers only growth beyond that: `STORAGE_RESERVE_BYTES ≥ 1.5 × measured growth` (rounded, not less than the current 16000). The minimum deposit in `new` stays `storage + 2 × STORAGE_RESERVE_BYTES`. If it turns out the reason limits must be tightened — I ask first.
+- After the build I check that the 3 NEAR in `scripts/deploy-testnet.sh` cover the new minimum (the wasm will grow); if not — I raise it and say by how much.
+- Tests: (a) sandbox — the creator does a full `claim`, after which the whole worst-case scenario (5 prepare → bind → rejection → 5 new prepare) passes without `LackBalanceForState`, and `growth ≤ STORAGE_RESERVE_BYTES`; (b) unit — `new` rejects a deposit 1 yocto below the new minimum and accepts exactly the minimum (updated `MIN_DEPOSIT_YOCTO`).
+- SPEC §3 and §5.3: the new number of bytes and ≈NEAR, justified by the measurement.
 
-## 1b. Известное ограничение (код не чиним, только SPEC + docs/AUDIT.md)
+## 1b. Known limitation (code is not fixed, only SPEC + docs/AUDIT.md)
 
-`prepare_challenge` стоит только газ и держит этап до `bind_until` без бонда. Креатор с другого аккаунта может каждые 20 минут подавать пустую заявку и не пускать настоящих челленджеров всё окно. Плюс каждая заявка навсегда занимает место в Treasury (`register_intent` ничего не удаляет, хранение платит Treasury). Фикс после хакатона: несколько заявок параллельно, выигрывает первая привязанная. Записываю в SPEC (раздел ограничений) и в AUDIT.md как открытую находку — в коммите шага 2.
+`prepare_challenge` costs only gas and holds the milestone until `bind_until` without a bond. The creator, from another account, can file an empty request every 20 minutes and keep real challengers out for the whole window. Plus each request permanently takes space in the Treasury (`register_intent` deletes nothing, the Treasury pays for storage). Fix after the hackathon: several requests in parallel, the first bound one wins. Recorded in SPEC (limitations section) and in AUDIT.md as an open finding — in the step 2 commit.
 
-## 2. Методы
+## 2. Methods
 
-`new(..., treasury: Option<AccountId>)`: при Some — `treasury ≠ self, creator, verifier`. Отсутствующее поле в JSON → None, поэтому старые интеграционные тесты и скрипты не меняются.
+`new(..., treasury: Option<AccountId>)`: with Some — `treasury ≠ self, creator, verifier`. A missing field in JSON → None, so the old integration tests and scripts do not change.
 
-При `treasury = None` всё как сейчас; новые методы паникуют `"No treasury"`.
-При `treasury = Some`: `challenge` → `"Bond required"`, `resolve` → `"Use arbitrate"`.
+With `treasury = None` everything is as today; the new methods panic with `"No treasury"`.
+With `treasury = Some`: `challenge` → `"Bond required"`, `resolve` → `"Use arbitrate"`.
 
-| Метод | Кто | Условие | Действие |
+| Method | Who | Condition | Action |
 |---|---|---|---|
-| `prepare_challenge(index, reason)` | кто угодно, кроме creator и verifier | Submitted, окно открыто, нет активной заявки (нет `case` или она Orphaned/Settled-после-отказа, или не привязана и `now ≥ bind_until`) | sync, F/B/R, запись case (RegisterPending) → `register_intent` → `on_registered` |
-| `retry_registration(index)` | payer | RegisterRetryable | тот же intent (Treasury идемпотентен) |
-| *(челленджер сам)* `treasury.deposit_bond(escrow_id)` ровно B | payer | | NEAR бонда идут в Treasury, goal их не видит |
-| `confirm_escrow(index)` | payer | Ready / BindRetryable | `get_bond` → `on_verified` (сверка goal/proof/case/payer/amount/сроков, статус Deposited\|Bound) → `bind_bond` → `on_bound`: этап **Challenged**, `challenger/reason/challenged_at` заполняются, событие `proof_challenged` |
-| `qualify(index, qualified)` | verifier | Challenged, case Bound, `now < refund_after` | true → Qualified (без вызова Treasury). false → этап **Submitted** (поля challenger очищаются), decision QualificationRejected → `authorize_decision` → `on_decided` → `settle_bond(REFUND, "bond:{case_id}")` → `on_settled` |
-| `arbitrate(index, valid)` | verifier | Challenged, case Qualified, `now < refund_after` | valid → этап **Accepted**, ProofValid → SLASH. invalid → этап **Rejected**, ProofInvalidFinal → REFUND. Та же цепочка decided→settled |
-| `retry_decision(index)` / `retry_settlement(index)` | кто угодно | DecisionRetryable / SettlementRetryable | повтор с теми же аргументами (decision и settlement_id неизменны) |
-| `resolve_timeout(index)` | кто угодно | Challenged, case Bound/Qualified, `now ≥ refund_after` | этап **Accepted**, stage TimeoutRequested → `treasury.refund_expired` → `on_timeout_refund` (только событие) |
-| `finalize(index)` | как сейчас | + не блокируется заявкой, если она не привязана и `now ≥ bind_until` | без изменений иначе |
+| `prepare_challenge(index, reason)` | anyone except creator and verifier | Submitted, window open, no active request (no `case`, or it is Orphaned/Settled-after-rejection, or unbound and `now ≥ bind_until`) | sync, F/B/R, write case (RegisterPending) → `register_intent` → `on_registered` |
+| `retry_registration(index)` | payer | RegisterRetryable | the same intent (the Treasury is idempotent) |
+| *(the challenger directly)* `treasury.deposit_bond(escrow_id)` exactly B | payer | | the bond's NEAR go to the Treasury, the goal never sees them |
+| `confirm_escrow(index)` | payer | Ready / BindRetryable | `get_bond` → `on_verified` (check goal/proof/case/payer/amount/deadlines, status Deposited\|Bound) → `bind_bond` → `on_bound`: milestone **Challenged**, `challenger/reason/challenged_at` are filled, event `proof_challenged` |
+| `qualify(index, qualified)` | verifier | Challenged, case Bound, `now < refund_after` | true → Qualified (no Treasury call). false → milestone **Submitted** (challenger fields cleared), decision QualificationRejected → `authorize_decision` → `on_decided` → `settle_bond(REFUND, "bond:{case_id}")` → `on_settled` |
+| `arbitrate(index, valid)` | verifier | Challenged, case Qualified, `now < refund_after` | valid → milestone **Accepted**, ProofValid → SLASH. invalid → milestone **Rejected**, ProofInvalidFinal → REFUND. The same decided→settled chain |
+| `retry_decision(index)` / `retry_settlement(index)` | anyone | DecisionRetryable / SettlementRetryable | repeat with the same arguments (decision and settlement_id are immutable) |
+| `resolve_timeout(index)` | anyone | Challenged, case Bound/Qualified, `now ≥ refund_after` | milestone **Accepted**, stage TimeoutRequested → `treasury.refund_expired` → `on_timeout_refund` (event only) |
+| `finalize(index)` | as today | + not blocked by a request if it is unbound and `now ≥ bind_until` | otherwise unchanged |
 
-Статус этапа меняется сразу в методе verifier/таймаута («state first»), а цепочка в Treasury — только про бонд. Это безопасно: если `authorize_decision` дойдёт до Treasury уже после `refund_after`, бонд вернётся нейтрально, а статус этапа тот же, что дал бы таймаут (valid→Accepted) или решение (invalid→Rejected, бонд и так возвращается).
+The milestone status changes immediately in the verifier/timeout method ("state first"), and the Treasury chain is only about the bond. This is safe: if `authorize_decision` reaches the Treasury after `refund_after`, the bond is refunded neutrally, and the milestone status is the same as the timeout would give (valid→Accepted) or the decision (invalid→Rejected, the bond is refunded anyway).
 
-## 3. Асинхронные цепочки и сбои колбэков
+## 3. Async chains and callback failures
 
-Все колбэки `#[private]`, принимают `(index, nonce)`, **никогда не паникуют** (как `on_claim_transfer`): при несовпадении stage/nonce — `return false`. Перед каждым вызовом: stage = *Pending, `nonce += 1`. Газ — как в Mock (register 35+15, get_bond 15 + on_verified 80, bind 35+15, authorize 35 + on_decided 85, settle 60+15, refund_expired 60+15); пользователю 300 TGas.
+All callbacks are `#[private]`, take `(index, nonce)`, **never panic** (like `on_claim_transfer`): on a stage/nonce mismatch — `return false`. Before every call: stage = *Pending, `nonce += 1`. Gas as in the Mock (register 35+15, get_bond 15 + on_verified 80, bind 35+15, authorize 35 + on_decided 85, settle 60+15, refund_expired 60+15); 300 TGas for the user.
 
-| Сбой | Что происходит |
+| Failure | What happens |
 |---|---|
-| `register_intent` упал | RegisterRetryable → payer зовёт `retry_registration`; либо через 20 мин можно подать новую заявку |
-| бонд не внесён / не подтверждён | этап остаётся Submitted; после `bind_until` finalize и новая заявка разрешены; внесённый бонд кто угодно возвращает `treasury.refund_expired` |
-| `get_bond` не сошёлся / `bind_bond` упал | BindRetryable → payer повторяет `confirm_escrow` до `bind_until` |
-| `on_bound` пришёл, а этап уже не Submitted (гонка с finalize на границе `bind_until`) | stage Orphaned, этап не трогаем; бонд Bound → нейтральный возврат после `refund_after` |
-| `authorize_decision` упал | DecisionRetryable → `retry_decision` (кто угодно) до `refund_after` |
-| `settle_bond` упал | SettlementRetryable → `retry_settlement`; повтор с тем же id в Treasury — no-op, двойной выплаты нет |
-| ретраи опоздали | кто угодно вызывает `treasury.refund_expired` → NeutralRefund |
-| `refund_expired` из goal упал (например, уже вызван напрямую) | только событие; бонд всё равно возвращается через Treasury |
+| `register_intent` failed | RegisterRetryable → the payer calls `retry_registration`; or after 20 min a new request can be filed |
+| bond not deposited / not confirmed | the milestone stays Submitted; after `bind_until` finalize and a new request are allowed; a deposited bond is returned by anyone via `treasury.refund_expired` |
+| `get_bond` did not match / `bind_bond` failed | BindRetryable → the payer repeats `confirm_escrow` before `bind_until` |
+| `on_bound` arrived but the milestone is no longer Submitted (race with finalize at the `bind_until` boundary) | stage Orphaned, the milestone is not touched; bond Bound → neutral refund after `refund_after` |
+| `authorize_decision` failed | DecisionRetryable → `retry_decision` (anyone) before `refund_after` |
+| `settle_bond` failed | SettlementRetryable → `retry_settlement`; a repeat with the same id in the Treasury is a no-op, no double payout |
+| retries came too late | anyone calls `treasury.refund_expired` → NeutralRefund |
+| `refund_expired` from the goal failed (e.g. already called directly) | event only; the bond is refunded through the Treasury anyway |
 
-Goal не переводит NEAR и не прикладывает deposit ни к одному вызову Treasury → `sync`, `claim`, `last_balance` не меняются. Settled в Goal = «инструкция принята»; фактический Refunded/Slashed смотрим через `treasury.get_bond` (UI).
+The goal transfers no NEAR and attaches no deposit to any Treasury call → `sync`, `claim`, `last_balance` do not change. Settled in the goal = "instruction accepted"; the actual Refunded/Slashed is read via `treasury.get_bond` (UI).
 
-События: `challenge_prepared` {index, case_id, payer, amount}, `proof_challenged` (при bind), `challenge_qualified` {index, qualified}, `bond_settlement` {index, decision, stage}.
+Events: `challenge_prepared` {index, case_id, payer, amount}, `proof_challenged` (at bind), `challenge_qualified` {index, qualified}, `bond_settlement` {index, decision, stage}.
 
-## 4. Порядок работы и коммиты
+## 4. Order of work and commits
 
-1. `docs/TREASURY_INTEGRATION_PLAN.md` (этот план) — коммит.
-2. SPEC: §2 (бонд теперь опционально), §3 параметр `treasury`, §4 состояние, §6 переходы, §7 методы/ошибки, §8 события, §10 тесты; DECISIONS: запись 2026-11-13 (F, сроки 10/10 мин + 24 ч, отказ квалификации → Submitted, награды нет). — коммит.
-3. Код в `contracts/goal/src/lib.rs` (+ `treasury.rs` для case/колбэков, чтобы lib.rs не разрастался) и юнит-тесты; существующие тесты меняются только механически (добавить `None` в 4 прямых вызова `Goal::new` и хелпер). — коммит.
-4. `contracts/goal/tests/treasury.rs` — песочница с настоящим `bond-treasury/release/bond_treasury.wasm`: сначала замер хранения и скорость `fast_forward`, затем подъём `STORAGE_RESERVE_BYTES` (+ SPEC, + юнит-тест депозита) отдельным коммитом, затем сценарии. — коммиты.
+1. `docs/TREASURY_INTEGRATION_PLAN.md` (this plan) — commit.
+2. SPEC: §2 (the bond is now optional), §3 the `treasury` parameter, §4 state, §6 transitions, §7 methods/errors, §8 events, §10 tests; DECISIONS: entry 2026-11-13 (F, deadlines 10/10 min + 24 h, qualification rejection → Submitted, no reward). — commit.
+3. Code in `contracts/goal/src/lib.rs` (+ `treasury.rs` for the case/callbacks, so lib.rs does not grow too large) and unit tests; existing tests change only mechanically (add `None` to 4 direct `Goal::new` calls and the helper). — commit.
+4. `contracts/goal/tests/treasury.rs` — sandbox with the real `bond-treasury/release/bond_treasury.wasm`: first the storage measurement and the `fast_forward` speed, then raising `STORAGE_RESERVE_BYTES` (+ SPEC, + deposit unit test) in a separate commit, then the scenarios. — commits.
 
-В testnet ничего не деплою. В 19:00 — контрольная точка: если песочница не зелёная, коммичу что есть и пишу, что осталось.
+Nothing is deployed to testnet. At 19:00 — checkpoint: if the sandbox is not green, I commit what exists and write what is left.
 
-## 5. Тесты
+## 5. Tests
 
-Юнит (новые, через `VMContextBuilder` + `PromiseResult`, по образцу тестов Mock): `new` без treasury = старое поведение; `treasury == creator` отклоняется; `challenge`/`resolve` в режиме Treasury паникуют; расчёт F/B/R (F=0 → B=1N,R=0; большой F → потолок 5N/2N); prepare от creator/verifier запрещён; повторная prepare при активной заявке запрещена, после `bind_until` разрешена; неподтверждённая заявка не блокирует finalize после `bind_until` и блокирует до; каждый колбэк: успех, сбой → Retryable, устаревший nonce → no-op; `on_bound` после finalize → Orphaned; qualify/arbitrate только verifier и только до `refund_after`; resolve_timeout до/после `refund_after`; `sync` не меняет `total_received` на протяжении сценария.
+Unit (new, via `VMContextBuilder` + `PromiseResult`, following the Mock tests): `new` without treasury = old behavior; `treasury == creator` is rejected; `challenge`/`resolve` panic in Treasury mode; F/B/R calculation (F=0 → B=1N,R=0; large F → cap 5N/2N); prepare from creator/verifier is forbidden; a repeated prepare with an active request is forbidden, allowed after `bind_until`; an unconfirmed request does not block finalize after `bind_until` and blocks it before; every callback: success, failure → Retryable, stale nonce → no-op; `on_bound` after finalize → Orphaned; qualify/arbitrate only by the verifier and only before `refund_after`; resolve_timeout before/after `refund_after`; `sync` does not change `total_received` throughout the scenario.
 
-Песочница (`tests/treasury.rs`): genesis `testnet` → `treasury.testnet` (new + register_goal + fund_storage), goal с `treasury`, fees 10 NEAR, proof:
-1. отказ квалификации → бонд Refunded, баланс челленджера +B, этап Submitted;
-2. valid → Slashed, `get_buyback_balance(goal) = B`, этап Accepted;
-3. invalid → Refunded, этап Rejected;
-4. таймаут: `fast_forward` за `refund_after` → `resolve_timeout` → Accepted, decision NeutralRefund, челленджер +B;
-5. повторное урегулирование: `retry_settlement` после Settled → ошибка; прямой `settle_bond`/`refund_expired` в Treasury → ошибка; баланс челленджера не изменился второй раз;
-6. посторонний: `qualify`/`arbitrate` → `"Only verifier"`; `confirm_escrow` не от payer → `"Only payer"`.
-Во всех сценариях: `total_received` goal не вырос на B.
+Sandbox (`tests/treasury.rs`): genesis `testnet` → `treasury.testnet` (new + register_goal + fund_storage), goal with `treasury`, fees 10 NEAR, proof:
+1. qualification rejected → bond Refunded, challenger balance +B, milestone Submitted;
+2. valid → Slashed, `get_buyback_balance(goal) = B`, milestone Accepted;
+3. invalid → Refunded, milestone Rejected;
+4. timeout: `fast_forward` past `refund_after` → `resolve_timeout` → Accepted, decision NeutralRefund, challenger +B;
+5. repeated settlement: `retry_settlement` after Settled → error; direct `settle_bond`/`refund_expired` in the Treasury → error; the challenger's balance did not change a second time;
+6. outsider: `qualify`/`arbitrate` → `"Only verifier"`; `confirm_escrow` not from the payer → `"Only payer"`.
+In all scenarios: the goal's `total_received` did not grow by B.
 
-7. резерв хранения (см. 1a): полный claim → худший сценарий проходит, рост ≤ резерва.
+7. storage reserve (see 1a): full claim → the worst-case scenario passes, growth ≤ reserve.
 
-Таймаут: ~26 ч в песочнице (~310 тыс. блоков `fast_forward`). Проверяю первым делом. Если слишком медленно — feature `short-timeouts` в `Cargo.toml` goal: под `#[cfg(feature = "short-timeouts")]` укорочены `RESOLVE_TIMEOUT_MS` и окна депозита/привязки (например, 5 мин / 1 / 1 мин); песочничные тесты Treasury собирают wasm через `cargo_near_build` с этой feature. Релизный wasm (`cargo near build non-reproducible-wasm`, контейнерная команда в Cargo.toml) — без feature, 24 ч. Старые 3 интеграционных теста продолжают использовать обычную сборку. Плюс юнит-тест, что без feature константа = 86_400_000.
+Timeout: ~26 h in the sandbox (~310 thousand `fast_forward` blocks). Checked first. If too slow — feature `short-timeouts` in the goal's `Cargo.toml`: under `#[cfg(feature = "short-timeouts")]` `RESOLVE_TIMEOUT_MS` and the deposit/bind windows are shortened (e.g. 5 min / 1 / 1 min); the Treasury sandbox tests build the wasm via `cargo_near_build` with this feature. The release wasm (`cargo near build non-reproducible-wasm`, the container command in Cargo.toml) — without the feature, 24 h. The old 3 integration tests keep using the regular build. Plus a unit test that without the feature the constant = 86_400_000.
 
-## Проверка
+## Verification
 
-- `cd contracts/goal && cargo test` — 83 старых юнит + новые, 3 старых интеграционных + новые песочничные, всё зелёное.
-- `cargo near build non-reproducible-wasm` собирается.
-- `git log` в `feat/goal-treasury` — 4 коммита по шагам; `main` не тронут.
+- `cd contracts/goal && cargo test` — 83 old unit + new, 3 old integration + new sandbox, all green.
+- `cargo near build non-reproducible-wasm` builds.
+- `git log` in `feat/goal-treasury` — 4 commits by steps; `main` untouched.
