@@ -1,0 +1,8 @@
+/target/
+/toolchain/
+/work/
+/attachments/
+node_modules/
+.near-credentials/
+*.key
+.env

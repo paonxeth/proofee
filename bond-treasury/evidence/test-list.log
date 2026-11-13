@@ -1,0 +1,82 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s
+     Running unittests src/lib.rs (target/debug/deps/bond_treasury-aa224e79fe2bca02)
+tests::arbitration_cannot_override_timeout_refund: test
+tests::bad_economics: test
+tests::bound_timeout_even_if_goal_disabled: test
+tests::conflict: test
+tests::decision_conflict: test
+tests::duplicate_deposit: test
+tests::duplicate_funding: test
+tests::duplicate_goal: test
+tests::economic_boundary_reference_only: test
+tests::excessive_reward: test
+tests::failure_retry_stale_callback: test
+tests::funded_reward_success_replay: test
+tests::immutable_intent_payer: test
+tests::intent_replay: test
+tests::late_arbitration_slash_rejected_at_boundary: test
+tests::late_decision: test
+tests::low_gas: test
+tests::no_late_bind: test
+tests::one_challenger_per_proof: test
+tests::one_escrow_per_case: test
+tests::orphan_timeout: test
+tests::other_goal_cannot_fund: test
+tests::other_goal_cannot_pay: test
+tests::outsider_bind: test
+tests::outsider_decision: test
+tests::outsider_intent: test
+tests::outsider_pause: test
+tests::outsider_register: test
+tests::outsider_revoke: test
+tests::pause_deposit: test
+tests::pending_retry: test
+tests::production_neutral_refund: test
+tests::production_rejected_no_reward: test
+tests::production_slash_needs_verdict: test
+tests::production_valid_slash: test
+tests::qualification_rejected_before_bind: test
+tests::refund_success_and_replay: test
+tests::reward_conflict_rejected: test
+tests::reward_failure_retry: test
+tests::reward_insolvency: test
+tests::reward_pending_retry_rejected: test
+tests::reward_requires_confirmed_refund: test
+tests::settlement_id_cannot_cross_escrows: test
+tests::signer_is_not_authority: test
+tests::slash_isolation: test
+tests::slash_unbound_rejected: test
+tests::timeout_cannot_override_prior_slash: test
+tests::timeout_cannot_repeat_pending_refund: test
+tests::timeout_has_no_reward: test
+tests::underfunded_deposit: test
+tests::unfunded_reward: test
+tests::valid_proof_has_no_reward: test
+tests::view_contract_and_donation: test
+tests::wrong_amount: test
+tests::wrong_payer: test
+tests::zero_reward_funding: test
+tests::zero_storage_funding: test
+
+57 tests, 0 benchmarks
+     Running unittests src/lib.rs (target/debug/deps/mock_goal-84f0398203ca0303)
+tests::decision_and_settlement_callbacks: test
+tests::duplicate_prepare: test
+tests::failed_verification: test
+tests::funding_and_claim_routes: test
+tests::funding_callback_and_replay: test
+tests::neutral_not_rewardable: test
+tests::prepare_callback_retry: test
+tests::qualification_and_bound_callback: test
+tests::recover_funding_callback: test
+tests::refresh_reward_and_stale: test
+tests::refresh_timeout: test
+tests::retry_and_view_routes: test
+tests::unauthorized_arbitrate: test
+tests::unauthorized_bind: test
+tests::unauthorized_claim: test
+tests::unauthorized_mock_funding: test
+tests::unauthorized_prepare: test
+tests::unauthorized_qualify: test
+
+18 tests, 0 benchmarks
