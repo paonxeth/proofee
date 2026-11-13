@@ -1,0 +1,32 @@
+{
+  "base_repository": "https://github.com/paonxeth/proofee",
+  "base_commit": "bcb49340c9a9c6844a928fab093ab672920fbb21",
+  "poc_archive": {
+    "drive_id": "1fhkJZO1LFuC7zLM1JbEJHJbEQdDA-vzJ",
+    "sha256": "a5028b430cb3ae55ebb1feebf3f579f7e6a3c78011ad8f9957f3577fcf9fb2fe"
+  },
+  "ft_source_commit": "15360ac443fe91e9d55a3b3db616fe6eb6514942",
+  "ft_source_modifications": [],
+  "goal_source_modifications": [],
+  "second_poc_archive_available": false,
+  "nearly_code_copied": false,
+  "toolchain": {
+    "rust": "1.100.0",
+    "cargo_near": "0.23.0",
+    "near_api_js": "5.1.1"
+  },
+  "wasm": {
+    "fungible_token.wasm": {
+      "bytes": 280361,
+      "sha256": "168bc5737c8e3097caeab0dd4bba14092f81bc22c89e591ab4b1f32958ee94c6"
+    },
+    "locker.wasm": {
+      "bytes": 155432,
+      "sha256": "b72c076a78ea7337c5b5c0fba09dc0d6914440bceb5161576a8c3b4a8f8510f2"
+    },
+    "goal.wasm": {
+      "bytes": 163120,
+      "sha256": "a51c4d1c715f43e4f174ea73697b7e8fa43fa832050f000ec757249186e9e6fa"
+    }
+  }
+}

@@ -1,0 +1,425 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "dcl-testnet",
+    "version": "poc-2026-11-12",
+    "authors": []
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "get_metadata",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": []
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "storage_balance_bounds",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": []
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "storage_deposit",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "registration_only",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "create_pool",
+        "kind": "call",
+        "modifiers": [
+          "payable"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "token_a",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_b",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "fee",
+              "type_schema": {
+                "type": "integer"
+              }
+            },
+            {
+              "name": "init_point",
+              "type_schema": {
+                "type": "integer"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {}
+        }
+      },
+      {
+        "name": "get_pool",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "pool_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "quote",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "pool_ids",
+              "type_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            {
+              "name": "input_token",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "output_token",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "input_amount",
+              "type_schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "list_liquidities",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "from_index",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "limit",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      {
+        "name": "get_liquidity",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lpt_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "get_user_asset",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          }
+        }
+      },
+      {
+        "name": "list_user_assets",
+        "kind": "view",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "account_id",
+              "type_schema": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "type": "object"
+          }
+        }
+      },
+      {
+        "name": "remove_liquidity",
+        "kind": "call",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "lpt_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            },
+            {
+              "name": "min_amount_x",
+              "type_schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            },
+            {
+              "name": "min_amount_y",
+              "type_schema": {
+                "type": "string",
+                "pattern": "^[0-9]+$"
+              }
+            },
+            {
+              "name": "skip_refund_transfer",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {}
+        }
+      },
+      {
+        "name": "withdraw_asset",
+        "kind": "call",
+        "modifiers": [],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "token_id",
+              "type_schema": {
+                "type": "string"
+              }
+            },
+            {
+              "name": "amount",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[0-9]+$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "skip_unwrap_near",
+              "type_schema": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {}
+        }
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "definitions": {}
+    }
+  },
+  "_provenance": {
+    "scope": "Tested Testnet deployment; see evidence for specific calls. HotZap and Swap are JSON messages inside FT.ft_transfer_call, specified in FRONTEND-HANDOFF.md.",
+    "warning": "Handwritten minimal integration ABI. Not an extracted complete on-chain ABI; unspecified return schemas deliberately remain open. See transaction evidence for execution."
+  }
+}

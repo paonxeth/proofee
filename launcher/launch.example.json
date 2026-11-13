@@ -1,0 +1,11 @@
+{
+  "network": "testnet",
+  "launch_id": "e2e1",
+  "name": "ProoFee Launcher E2E",
+  "symbol": "PFL",
+  "decimals": 18,
+  "image_uri": "",
+  "init_point": -69400,
+  "left_point": -69200,
+  "right_point": -59400
+}

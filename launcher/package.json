@@ -1,0 +1,21 @@
+{
+  "name": "proofee-testnet-launcher",
+  "version": "0.1.0",
+  "description": "Sequential Testnet Launcher and permissionless LP fee orchestration",
+  "main": "scripts/launch.cjs",
+  "scripts": {
+    "test": "cargo test --manifest-path contracts/locker/Cargo.toml --lib",
+    "build": "bash scripts/build.sh",
+    "launch": "node scripts/launch.cjs",
+    "e2e": "node scripts/e2e.cjs",
+    "security": "node scripts/security.cjs",
+    "verify": "node scripts/verify.cjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "near-api-js": "5.1.1"
+  }
+}

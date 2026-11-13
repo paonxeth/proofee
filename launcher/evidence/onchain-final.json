@@ -1,0 +1,105 @@
+{
+  "network": "testnet",
+  "contracts": {
+    "token_id": {
+      "account_id": "token-e2e1.pf-launch-mwdyyhj0.testnet",
+      "account": {
+        "amount": "3202500000000000000000009",
+        "block_hash": "9Zw7iDrAyGPDKACh7MsVJB3VHG1nkJxzGtUjXVksMumi",
+        "block_height": 277411122,
+        "code_hash": "2X1arsfx4o9xHEWotgUp6dssvtDw1etejXcYjWPwsyfT",
+        "locked": "0",
+        "storage_paid_at": 0,
+        "storage_usage": 280894
+      },
+      "keys": [],
+      "code_hash_verified": true
+    },
+    "locker_id": {
+      "account_id": "lock-e2e1.pf-launch-mwdyyhj0.testnet",
+      "account": {
+        "amount": "2490029999999999999999996",
+        "block_hash": "81ZRhhq4zfE2NvrkJ6SzTpoefdwCedVk9eyHoHgRbuyh",
+        "block_height": 277411123,
+        "code_hash": "DL2YnvMcSutbvrUYvQBQRuSTFch4Ux8VVot2UnUnGqBf",
+        "locked": "0",
+        "storage_paid_at": 0,
+        "storage_usage": 156031
+      },
+      "keys": [],
+      "code_hash_verified": true
+    },
+    "goal_id": {
+      "account_id": "goal-e2e1.pf-launch-mwdyyhj0.testnet",
+      "account": {
+        "amount": "2100956118686708701053120",
+        "block_hash": "45sRVGdNBSXgZ9ZRFsKXwA1fKQvxqTncRgXwAKpNYwJi",
+        "block_height": 277411124,
+        "code_hash": "C7XJPm1bVJ631wDsUkqTV4ENwoJFyvYwY9jZ1tFvLHTF",
+        "locked": "0",
+        "storage_paid_at": 0,
+        "storage_usage": 163709
+      },
+      "keys": [],
+      "code_hash_verified": true
+    }
+  },
+  "token": {
+    "metadata": {
+      "spec": "ft-1.0.0",
+      "name": "ProoFee Launcher E2E",
+      "symbol": "PFL",
+      "icon": null,
+      "reference": null,
+      "reference_hash": null,
+      "decimals": 18
+    },
+    "supply": "1000000000000000000000000000",
+    "locker_wallet": "0",
+    "internal_assets": {
+      "token-e2e1.pf-launch-mwdyyhj0.testnet": "120320"
+    }
+  },
+  "launch": {
+    "creator_id": "pf-launch-mwdyyhj0.testnet",
+    "goal_id": "goal-e2e1.pf-launch-mwdyyhj0.testnet",
+    "token_id": "token-e2e1.pf-launch-mwdyyhj0.testnet",
+    "pool_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000",
+    "lpt_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000#2583",
+    "supply": "1000000000000000000000000000",
+    "phase": "Active",
+    "pending": null,
+    "principal_liquidity": "4057331146356777986151",
+    "dust_x": "120320",
+    "dust_y": "0",
+    "fee_x": "0",
+    "fee_y": "0",
+    "swapped_wnear": "0",
+    "native_due": "0",
+    "native_paid": "1195148358385876316400",
+    "last_error": null
+  },
+  "lp": {
+    "lpt_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000#2583",
+    "owner_id": "lock-e2e1.pf-launch-mwdyyhj0.testnet",
+    "pool_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000",
+    "left_point": -69200,
+    "right_point": -59400,
+    "amount": "4057331146356777986151",
+    "mft_id": "",
+    "v_liquidity": "0",
+    "unclaimed_fee_x": "197523382504814527",
+    "unclaimed_fee_y": "0"
+  },
+  "goal": {
+    "total_received": "1195148358385876316400",
+    "immediate": "239029671677175263280",
+    "locked": "956118686708701053120",
+    "unlocked": "0",
+    "forfeited": "0",
+    "pending": "956118686708701053120",
+    "claimed": "239029671677175263280",
+    "claimable": "0",
+    "unsynced": "0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "network": "testnet",
+  "root": "pf-launch-mwdyyhj0.testnet",
+  "token_id": "token-e2e1.pf-launch-mwdyyhj0.testnet",
+  "locker_id": "lock-e2e1.pf-launch-mwdyyhj0.testnet",
+  "goal_id": "goal-e2e1.pf-launch-mwdyyhj0.testnet",
+  "pool_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000",
+  "lpt_id": "token-e2e1.pf-launch-mwdyyhj0.testnet|wrap.testnet|10000#2583"
+}

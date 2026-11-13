@@ -1,0 +1,11 @@
+[
+  {
+    "time": "2026-11-12T20:13:06.218Z",
+    "label": "stranger-collect-redirect-args",
+    "hash": "DRhqtc8pNwPUAz6CYNoVwm9qKus6SBLk9AHQpSwxjXne",
+    "signer": "caller.pf-launch-mwdyyhj0.testnet",
+    "receiver": "lock-e2e1.pf-launch-mwdyyhj0.testnet",
+    "status": "rejected_before_inclusion",
+    "error": "{\"http_status\":200,\"body\":{\"jsonrpc\":\"2.0\",\"error\":{\"name\":\"HANDLER_ERROR\",\"cause\":{\"info\":{},\"name\":\"INVALID_TRANSACTION\"},\"code\":-32000,\"message\":\"Server error\",\"data\":{\"TxExecutionError\":{\"InvalidTxError\":{\"NotEnoughBalance\":{\"balance\":\"200000000000000000000000\",\"cost\":\"300919593897772000000000\",\"signer_id\":\"caller.pf-launch-mwdyyhj0.testnet\"}}}}},\"id\":241}}"
+  }
+]

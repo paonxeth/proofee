@@ -1,0 +1,18 @@
+[
+  {
+    "hash": "DuQyvmBRoXWCs3FtRNsBeE32DNiNnSncHeEVS2qB4SU3",
+    "label": "advance-SwapBaseline-1794514144697",
+    "status": "not_included_nonce_consumed_by_final_replacement",
+    "signer": "pf-launch-mwdyyhj0.testnet",
+    "public_key": "ed25519:5Fdt4zcTjVn38oKRwA9kGtgSn83P1YV3BEt4sZv7AKto",
+    "nonce": "277409163000021",
+    "replacement": {
+      "hash": "BRMq3QuXWdF7Nx6vajErLriEHWBcLrwjChbZW51miMmr",
+      "signer": "pf-launch-mwdyyhj0.testnet",
+      "public_key": "ed25519:5Fdt4zcTjVn38oKRwA9kGtgSn83P1YV3BEt4sZv7AKto",
+      "nonce": "277409163000021",
+      "evidence_file": "final-advance-SwapBaseline-1794514175124-BRMq3QuXWdF7Nx6vajErLriEHWBcLrwjChbZW51miMmr.json"
+    },
+    "original_rpc_error": "{\"http_status\":429,\"error\":\"{\\\"jsonrpc\\\": \\\"2.0\\\", \\\"error\\\": {\\\"code\\\": -429, \\\"message\\\": \\\"WARNING! THIS ENDPOINT IS DEPRECATED! STOP USING IT NOW! Switch to https://fastnear.com or alternative RPC providers at https://docs.near.org/api/rpc/providers\\\"}, \\\"id\\\": \\\"1\\\"}\"}"
+  }
+]

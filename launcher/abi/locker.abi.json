@@ -1,0 +1,127 @@
+{
+  "schema_version": "0.4.0",
+  "metadata": {
+    "name": "locker",
+    "version": "0.1.0",
+    "build": {
+      "compiler": "rustc 1.100.0",
+      "builder": "cargo-near cargo-near-build 0.11.5"
+    },
+    "wasm_hash": "DL2YnvMcSutbvrUYvQBQRuSTFch4Ux8VVot2UnUnGqBf"
+  },
+  "body": {
+    "functions": [
+      {
+        "name": "advance",
+        "doc": " Permissionless; every destination and amount comes from immutable configuration/state.\n One external operation per invocation keeps callback gas bounded.",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
+          }
+        }
+      },
+      {
+        "name": "collect",
+        "doc": " Only zero-liquidity removal exists. There is no public amount or receiver argument.",
+        "kind": "call",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": {
+            "$ref": "#/definitions/Promise"
+          }
+        }
+      },
+      {
+        "name": "contract_source_metadata",
+        "kind": "view"
+      },
+      {
+        "name": "get_launch",
+        "kind": "view",
+        "result": {
+          "serialization_type": "json",
+          "type_schema": true
+        }
+      },
+      {
+        "name": "new",
+        "kind": "call",
+        "modifiers": [
+          "init"
+        ],
+        "params": {
+          "serialization_type": "json",
+          "args": [
+            {
+              "name": "creator_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "goal_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "token_id",
+              "type_schema": {
+                "description": "NEAR Account Identifier.\n\nThis is a unique, syntactically valid, human-readable account identifier on the NEAR network.\n\n[See the crate-level docs for information about validation.](index.html#account-id-rules)\n\nAlso see [Error kind precedence](AccountId#error-kind-precedence).\n\n## Examples\n\n``` use near_account_id::AccountId;\n\nlet alice: AccountId = \"alice.near\".parse().unwrap();\n\nassert!(\"ƒelicia.near\".parse::<AccountId>().is_err()); // (ƒ is not f) ```",
+                "type": "string"
+              }
+            },
+            {
+              "name": "decimals",
+              "type_schema": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              }
+            },
+            {
+              "name": "init_point",
+              "type_schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "left_point",
+              "type_schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            {
+              "name": "right_point",
+              "type_schema": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "on_complete",
+        "kind": "call",
+        "modifiers": [
+          "private"
+        ]
+      }
+    ],
+    "root_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "String",
+      "type": "string",
+      "definitions": {
+        "Promise": true
+      }
+    }
+  }
+}
