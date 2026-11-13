@@ -3,23 +3,24 @@
 Status: **prepared, not run.** Nothing below has been sent. Every command is checked against
 near-cli-rs 0.31.1 (`near --help`). Testnet only.
 
-Three milestones, a different Treasury outcome on each (SPEC 6a):
+All three Treasury outcomes (SPEC 6a) on two milestones:
 
-| Milestone | Proof | Challenge | Outcome |
+| Milestone | Proof | Request | Outcome |
 | --- | --- | --- | --- |
-| 0 — Goal Contract live | `proofs/m1.md` (strong) | disputed anyway, qualified | **ProofValid**: milestone Accepted, bond **slashed** to the buyback reserve |
+| 0 — Goal Contract live | `proofs/m1.md` (strong) | 1st: empty reason | **QualificationRejected**: bond **refunded**, milestone back to Submitted |
+| 0 | same proof | 2nd: disputed anyway, qualified | **ProofValid**: milestone Accepted, bond **slashed** to the buyback reserve |
 | 1 — Public web app | `proofs/m2.md` (static mockup, weak) | "no live URL" | **ProofInvalidFinal**: milestone Rejected, bond **refunded** |
-| 2 — Demo published on X | `proofs/m3.md` (**to be written**) | frivolous | **QualificationRejected**: bond **refunded**, milestone back to Submitted |
+| 2 — Demo published on X | — | — | not touched: stays Pending, closed later by a real post on X |
 
-The weak proof (m2) is on milestone 1 so that the "invalid" verdict is honest; the frivolous
-challenge goes on milestone 2, which has the latest deadline (21 Nov).
+Both requests on milestone 0 must be filed within its challenge window (15 min after the proof).
 
 ## Accounts and parameters
 
 - Goal: `goal-5.proofee-anton.testnet` (does not exist yet, checked 13 Nov), built from branch
   `feat/goal-treasury`, `scripts/goals/demo-treasury.json`: same milestones and spec as
-  `demo.json` (`specs/demo-goal.json`), immediate 2000 bps, **challenge window 600000 ms
-  (10 min)** instead of 2 min, so that `prepare_challenge` can be sent by hand after each proof.
+  `demo.json` (`specs/demo-goal.json`), immediate 2000 bps, **challenge window 900000 ms
+  (15 min)** instead of 2 min: two requests on milestone 0, sent by hand with a readback after
+  every transaction, must both fit into the window.
 - Treasury: `treasury.proofee-bond-lab-20261112-1794481933490.testnet`, `proofee-treasury/0.2.0`,
   code sha256 `5dfb0699…0c03` — the same wasm as `bond-treasury/release/bond_treasury.wasm` used
   in our sandbox tests. Admin: `proofee-bond-lab-20261112-1794481933490.testnet`.
@@ -27,7 +28,7 @@ challenge goes on milestone 2, which has the latest deadline (21 Nov).
   Challenger: `proofee-stranger.testnet`. Keys of all three are in the keychain (checked).
 - Milestone deadlines (from the spec): 0 — 14 Nov 20:59 UTC, 1 — 15 Nov, 2 — 21 Nov.
 - Fees: 1 NEAR → locked 0.8 NEAR. F for milestone 0 = 0.8 × 18.75% = 0.15 NEAR, milestone 1 =
-  0.25, milestone 2 = 0.4. All below 5 NEAR, so **B = 1 NEAR** on every milestone (the 1 NEAR
+  0.25. Both below 5 NEAR, so **B = 1 NEAR** on every request (the 1 NEAR
   floor); R = F/10 (passed to the Treasury, no reward is paid).
 - Deadlines per request: deposit within 10 min of `prepare_challenge`, bind (`confirm_escrow`)
   within 20 min, verifier decisions within 24 h after that.
@@ -41,13 +42,15 @@ unused gas is refunded.
 | Account | Spends | Needs at least | Has | Action |
 | --- | --- | --- | --- | --- |
 | proofee-stranger.testnet | 1.2 top-up to MASTER, 1 fees, 1 slashed bond, ≤ 0.2 gas (9 calls); 1 more bond is locked at a time and comes back | ≈ 4.4 | 7.997 | none; ends with ≈ 4.6 |
-| proofee-anton.testnet | 3 to the goal account, deploy gas, 3 × `submit_proof` | ≈ 3.1 | 2.28 | **+1.2 from stranger** (step 1) |
+| proofee-anton.testnet | 3 to the goal account, deploy gas, 2 × `submit_proof` | ≈ 3.1 | 2.28 | **+1.2 from stranger** (step 1) |
 | verifier.proofee-anton.testnet | 3 × `qualify` + 2 × `arbitrate`, ≤ 0.1 gas | 0.15 | 1.00 | none |
 | goal-5 | gets 3 (storage) + 1 (fees); never holds a bond | — | — | — |
 | Treasury | storage for 3 intents ≈ 0.015 from its free balance; holds the bonds | — | free ≈ 1.83 | none |
 | Treasury admin | `register_goal` gas ≈ 0.001 | — | 3.56 | one call (step 0) |
 
 ## Steps
+
+Transaction hashes are recorded in the log at the end.
 
 Shell variables for all commands (zsh):
 
@@ -104,7 +107,7 @@ Remember `total_received`: it must stay 1 NEAR to the end (bonds are never goal 
 
 ### A bonded challenge on milestone I (used in 4, 5, 6)
 
-`prepare_challenge` must come within 10 min of the proof; deposit and confirm right after.
+`prepare_challenge` must come within the 15 min window after the proof; deposit and confirm right after.
 
 ```zsh
 I=0; REASON='...'
@@ -121,20 +124,26 @@ tview get_bond "{\"escrow_id\":\"$ESCROW\"}" | jq '{status, decision, amount}'  
 that instead. If `confirm_escrow` leaves stage `BindRetryable`, repeat it (before the 20 min bind
 deadline).
 
-### 4. Milestone 0: proof valid → slash
+### 4. Milestone 0: qualification rejected, then proof valid → slash
 
 ```zsh
 near contract call-function as-transaction $GOAL submit_proof json-args "{\"index\":0,\"proof_uri\":\"$RAW/5f7951238e4fce621b2c236f03f7caff51f0e1a7/proofs/m1.md\",\"proof_hash\":\"a11429a8997cdc318165b8d332bd66fa50f174ba6dcd32ac8c7275ca64fa6c5d\"}" prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as $CREATOR network-config testnet sign-with-keychain send
-# bonded challenge: I=0, REASON='The contract is not verified on-chain'
+
+# 4a. First request, empty reason: I=0, REASON='' (case m0-1)
+near contract call-function as-transaction $GOAL qualify json-args '{"index":0,"qualified":false}' prepaid-gas '300 Tgas' attached-deposit '0 NEAR' sign-as $VERIFIER network-config testnet sign-with-keychain send
+case_of 0                                                  # Submitted, "Settled", "QualificationRejected"
+tview get_bond "{\"escrow_id\":\"$ESCROW\"}" | jq .status   # "Refunded"
+
+# 4b. Second request on the same milestone: I=0, REASON='The contract is not verified on-chain' (case m0-2)
 near contract call-function as-transaction $GOAL qualify json-args '{"index":0,"qualified":true}' prepaid-gas '300 Tgas' attached-deposit '0 NEAR' sign-as $VERIFIER network-config testnet sign-with-keychain send
 near contract call-function as-transaction $GOAL arbitrate json-args '{"index":0,"valid":true}' prepaid-gas '300 Tgas' attached-deposit '0 NEAR' sign-as $VERIFIER network-config testnet sign-with-keychain send
-case_of 0                                                  # Accepted, stage "Settled", decision "ProofValid"
+case_of 0                                                  # Accepted, "Settled", "ProofValid"
 tview get_bond "{\"escrow_id\":\"$ESCROW\"}" | jq .status   # "Slashed"
 tview get_buyback_balance "{\"goal\":\"$GOAL\"}"            # "1000000000000000000000000"
 ```
 
-Failing checks worth recording: `arbitrate` before `qualify` → `Wrong stage`; `qualify` signed by
-the challenger → `Only verifier`; `retry_settlement` after Settled → `Wrong stage`.
+The second request needs the first one Settled (otherwise `Challenge in progress`) and must be
+filed before the window closes (15 min after the proof).
 
 ### 5. Milestone 1: proof invalid → refund
 
@@ -149,21 +158,7 @@ tview get_bond "{\"escrow_id\":\"$ESCROW\"}" | jq .status   # "Refunded"
 
 Check the challenger's balance before the deposit and after: the difference is gas only.
 
-### 6. Milestone 2: qualification rejected → refund
-
-Needs `proofs/m3.md`, committed and pushed; its hash is `git show <commit>:proofs/m3.md | shasum -a 256`.
-
-```zsh
-near contract call-function as-transaction $GOAL submit_proof json-args "{\"index\":2,\"proof_uri\":\"$RAW/<commit>/proofs/m3.md\",\"proof_hash\":\"<sha256>\"}" prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as $CREATOR network-config testnet sign-with-keychain send
-# bonded challenge: I=2, REASON='I do not like this project'
-near contract call-function as-transaction $GOAL qualify json-args '{"index":2,"qualified":false}' prepaid-gas '300 Tgas' attached-deposit '0 NEAR' sign-as $VERIFIER network-config testnet sign-with-keychain send
-case_of 2                                                  # Submitted, "Settled", "QualificationRejected"
-tview get_bond "{\"escrow_id\":\"$ESCROW\"}" | jq .status   # "Refunded"
-```
-
-Optional: 10 min after the proof, `finalize(2)` by anyone → Accepted.
-
-### 7. Final checks
+### 6. Final checks
 
 ```zsh
 near contract call-function as-transaction $GOAL sync json-args '{}' prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as $CHALLENGER network-config testnet sign-with-keychain send
@@ -173,7 +168,7 @@ near account view-account-summary $CHALLENGER network-config testnet now      # 
 ```
 
 Expected goal balances: milestone 0 Accepted (15% of fees unlocked), milestone 1 Rejected
-(25% forfeited), milestone 2 Submitted or Accepted.
+(25% forfeited), milestone 2 Pending. Challenger: 3 bonds deposited, 2 refunded, 1 slashed.
 
 ## Fallback: our own Treasury on proofee-anton.testnet
 
@@ -203,3 +198,8 @@ near contract call-function as-transaction treasury.proofee-anton.testnet regist
 
 Then step 2 with `TREASURY=treasury.proofee-anton.testnet`. The treasury is fixed in `new`, so
 decide before deploying goal-5.
+
+## Log
+
+| # | Step | Signed by | Result | Transaction |
+| --- | --- | --- | --- | --- |
