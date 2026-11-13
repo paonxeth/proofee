@@ -97,7 +97,10 @@ export interface TreasuryBond {
     demo: boolean;
 }
 export declare const TESTNET_RPC_URL = "https://rpc.testnet.near.org";
-export declare const DEMO_GOAL_ID = "goal-4.proofee-anton.testnet";
+/** Demo goal with a Bond Treasury (docs/DEMO_RUN_TREASURY.md). */
+export declare const DEMO_GOAL_ID = "goal-5.proofee-anton.testnet";
+/** Earlier demo goal with free challenges, no treasury (docs/DEMO_RUN.md). */
+export declare const FREE_CHALLENGE_GOAL_ID = "goal-4.proofee-anton.testnet";
 export interface ReadOptions {
     /** JSON-RPC endpoint. Default: TESTNET_RPC_URL. */
     rpcUrl?: string;

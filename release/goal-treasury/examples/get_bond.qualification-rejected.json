@@ -1,0 +1,20 @@
+{
+  "amount": "1000000000000000000000000",
+  "attempt": 1,
+  "bind_until_ns": 1794600555051769186,
+  "case_id": "m0-1",
+  "created_at_ns": 1794599372267278185,
+  "decision": "QualificationRejected",
+  "demo": false,
+  "deposit_until_ns": 1794599955051769186,
+  "escrow_id": "026a1a1eb0ea9fdcfb16e763eee0333ec320a3b31f73183870054a908727ffcb",
+  "goal": "goal-5.proofee-anton.testnet",
+  "outcome": "REFUND",
+  "payer": "proofee-stranger.testnet",
+  "proof_id": "0:a11429a8997cdc318165b8d332bd66fa50f174ba6dcd32ac8c7275ca64fa6c5d:1",
+  "refund_after_ns": 1794686955051769186,
+  "reward_cap": "15000000000000000000000",
+  "settlement_id": "bond:m0-1",
+  "status": "Refunded",
+  "submission_id": "0"
+}

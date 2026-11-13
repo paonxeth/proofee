@@ -1,0 +1,23 @@
+{
+  "signer": "proofee-stranger.testnet",
+  "transaction": {
+    "receiverId": "goal-5.proofee-anton.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "prepare_challenge",
+          "args": {
+            "index": 0,
+            "reason": ""
+          },
+          "gas": "300000000000000",
+          "deposit": "0"
+        }
+      }
+    ]
+  },
+  "tx_hash": "HqypaBASGyHZFPM5CWaAp74LKeZoUAQdsYBmPga42r2X",
+  "explorer": "https://testnet.nearblocks.io/txns/HqypaBASGyHZFPM5CWaAp74LKeZoUAQdsYBmPga42r2X",
+  "result": "returns true; get_goal: milestones[0].status Submitted, case {case_id m0-1, stage Ready, amount 1 NEAR, escrow_id 026a1a1e…}; events challenge_prepared (goal), intent_registered (Treasury)"
+}

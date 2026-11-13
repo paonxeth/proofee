@@ -1,0 +1,23 @@
+{
+  "signer": "verifier.proofee-anton.testnet",
+  "transaction": {
+    "receiverId": "goal-5.proofee-anton.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "arbitrate",
+          "args": {
+            "index": 0,
+            "valid": true
+          },
+          "gas": "300000000000000",
+          "deposit": "0"
+        }
+      }
+    ]
+  },
+  "tx_hash": "3D5YQZoS2aMMMTkjA6nKeaVnWrmJC27YWqQijqUmqXpK",
+  "explorer": "https://testnet.nearblocks.io/txns/3D5YQZoS2aMMMTkjA6nKeaVnWrmJC27YWqQijqUmqXpK",
+  "result": "returns true; milestone Accepted, case Settled ProofValid; get_bond status Slashed, outcome SLASH; get_buyback_balance(goal-5) = 1 NEAR"
+}

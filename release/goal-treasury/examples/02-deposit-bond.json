@@ -1,0 +1,22 @@
+{
+  "signer": "proofee-stranger.testnet",
+  "transaction": {
+    "receiverId": "treasury.proofee-bond-lab-20261112-1794481933490.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "deposit_bond",
+          "args": {
+            "escrow_id": "026a1a1eb0ea9fdcfb16e763eee0333ec320a3b31f73183870054a908727ffcb"
+          },
+          "gas": "30000000000000",
+          "deposit": "1000000000000000000000000"
+        }
+      }
+    ]
+  },
+  "tx_hash": "cK5XTDDqNZWjwWcbKYaJu74HMvpGnqXNqR5MnUqFFVA",
+  "explorer": "https://testnet.nearblocks.io/txns/cK5XTDDqNZWjwWcbKYaJu74HMvpGnqXNqR5MnUqFFVA",
+  "result": "attach exactly case.amount; Treasury get_bond: status Deposited; event deposited"
+}

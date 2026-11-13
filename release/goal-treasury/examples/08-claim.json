@@ -1,0 +1,20 @@
+{
+  "signer": "proofee-anton.testnet",
+  "transaction": {
+    "receiverId": "goal-5.proofee-anton.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "claim",
+          "args": {},
+          "gas": "100000000000000",
+          "deposit": "0"
+        }
+      }
+    ]
+  },
+  "tx_hash": "G1Z7L832NU1EXnQKTddojJUkRVk5MeVyN6xvwBcRBw1j",
+  "explorer": "https://testnet.nearblocks.io/txns/G1Z7L832NU1EXnQKTddojJUkRVk5MeVyN6xvwBcRBw1j",
+  "result": "event claimed amount 0.35 NEAR (immediate 0.2 + milestone 0 unlocked 0.15); bonds are not goal income: total_received stays 1 NEAR"
+}

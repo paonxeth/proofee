@@ -5,7 +5,10 @@
 export const FINAL_CASE_STAGES = ["Settled", "TimeoutRequested", "Orphaned"];
 // ---- Reading ----
 export const TESTNET_RPC_URL = "https://rpc.testnet.near.org";
-export const DEMO_GOAL_ID = "goal-4.proofee-anton.testnet";
+/** Demo goal with a Bond Treasury (docs/DEMO_RUN_TREASURY.md). */
+export const DEMO_GOAL_ID = "goal-5.proofee-anton.testnet";
+/** Earlier demo goal with free challenges, no treasury (docs/DEMO_RUN.md). */
+export const FREE_CHALLENGE_GOAL_ID = "goal-4.proofee-anton.testnet";
 /** Calls a view method and parses its JSON result. */
 export async function viewFunction(contractId, methodName, args = {}, options = {}) {
     const doFetch = options.fetch ?? fetch;

@@ -12,5 +12,5 @@ For the frontend: copy this folder to `frontend/contracts/incoming/goal/goal-tre
 | `permissions.md` | who can call each method (SPEC 6a) |
 | `gas-deposit-storage.json` | gas and deposit per method, bond formulas, deadlines, storage |
 | `errors-events.md` | error texts, events, case stages (final / retryable) |
-| `deployment.testnet.json` | TEMPLATE, filled after the testnet run |
-| `examples/` | TEMPLATE, filled with real transactions after the run |
+| `deployment.testnet.json` | goal-5 on testnet: account, deploy and `register_goal` transactions |
+| `examples/` | real calls from the testnet run (wallet transaction format, tx hash, readback) |

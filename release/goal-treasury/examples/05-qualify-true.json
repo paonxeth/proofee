@@ -1,0 +1,23 @@
+{
+  "signer": "verifier.proofee-anton.testnet",
+  "transaction": {
+    "receiverId": "goal-5.proofee-anton.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "qualify",
+          "args": {
+            "index": 0,
+            "qualified": true
+          },
+          "gas": "300000000000000",
+          "deposit": "0"
+        }
+      }
+    ]
+  },
+  "tx_hash": "CXtr1rQvPrFBrnqG8Y8891knKPCNiviuDFeUNXuYYVge",
+  "explorer": "https://testnet.nearblocks.io/txns/CXtr1rQvPrFBrnqG8Y8891knKPCNiviuDFeUNXuYYVge",
+  "result": "second request m0-2 (prepare Gk7RKH91…, deposit vQ2TnqVQ…, confirm 3ysmPXjm…), escrow d1bf875d…; case stage Qualified, milestone still Challenged, no Treasury call"
+}

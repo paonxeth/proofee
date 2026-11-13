@@ -1,0 +1,22 @@
+{
+  "signer": "proofee-stranger.testnet",
+  "transaction": {
+    "receiverId": "goal-5.proofee-anton.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "confirm_escrow",
+          "args": {
+            "index": 0
+          },
+          "gas": "300000000000000",
+          "deposit": "0"
+        }
+      }
+    ]
+  },
+  "tx_hash": "9xXnwLxdfLb831kkS8dSHJeFnyFqvKArWZUaDo6oGVqt",
+  "explorer": "https://testnet.nearblocks.io/txns/9xXnwLxdfLb831kkS8dSHJeFnyFqvKArWZUaDo6oGVqt",
+  "result": "returns true; milestone Challenged, challenger set, case stage Bound; get_bond status Bound; events bound (Treasury), proof_challenged (goal)"
+}

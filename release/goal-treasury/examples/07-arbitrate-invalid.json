@@ -1,0 +1,23 @@
+{
+  "signer": "verifier.proofee-anton.testnet",
+  "transaction": {
+    "receiverId": "goal-5.proofee-anton.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "arbitrate",
+          "args": {
+            "index": 1,
+            "valid": false
+          },
+          "gas": "300000000000000",
+          "deposit": "0"
+        }
+      }
+    ]
+  },
+  "tx_hash": "2bYLpXnHKtQ2BvUESrxFnjUbXPBi3RsqeYqaNFL7Ru9S",
+  "explorer": "https://testnet.nearblocks.io/txns/2bYLpXnHKtQ2BvUESrxFnjUbXPBi3RsqeYqaNFL7Ru9S",
+  "result": "milestone 1, request m1-1, escrow 44e4ed8b… (prepare GkX2iKTV…, deposit AkUJMpDt…, confirm 7dXPHLiS…, qualify true 2RoiAdfv…); milestone Rejected, case Settled ProofInvalidFinal; get_bond Refunded, outcome REFUND"
+}

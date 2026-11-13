@@ -107,9 +107,9 @@ as `"Only creator"` or `"Window still open"` (SPEC 7).
 
 ## Demo page
 
-`demo.html` reads `goal-4.proofee-anton.testnet` and shows the goal, milestones with statuses and
-shares, balances and the spec hash check. For a goal with a treasury it also links the Treasury on
-NearBlocks and shows under each milestone its bonded request: stage, challenger, bond, deadlines,
+`demo.html` reads `goal-5.proofee-anton.testnet` (`DEMO_GOAL_ID`) and shows the goal, milestones
+with statuses and shares, balances and the spec hash check. For a goal with a treasury it also
+links the Treasury on NearBlocks and shows under each milestone its bonded request: stage, challenger, bond, deadlines,
 decision and the bond status from `treasury.get_bond`. Read-only. ES modules and `crypto.subtle` need a local server:
 
 ```sh
@@ -117,12 +117,12 @@ cd client
 python3 -m http.server 8000
 # open http://localhost:8000/demo.html
 # another goal: http://localhost:8000/demo.html?goal=<account>.testnet
-# bonded challenges: http://localhost:8000/demo.html?goal=goal-5.proofee-anton.testnet
+# goal-4, free challenges (FREE_CHALLENGE_GOAL_ID): http://localhost:8000/demo.html?goal=goal-4.proofee-anton.testnet
 ```
 
 ## Tests
 
 ```sh
 npm test            # offline: formatting, shares, transactions, spec check, get_bond, old/new get_goal
-npm run test:live   # read-only: goal-4 on testnet must match docs/DEMO_RUN.md
+npm run test:live   # read-only: goal-4 must match docs/DEMO_RUN.md, goal-5 docs/DEMO_RUN_TREASURY.md
 ```

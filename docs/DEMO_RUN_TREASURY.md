@@ -225,6 +225,8 @@ decide before deploying goal-5.
 | 5.5 | `qualify` 1 true | verifier.proofee-anton.testnet | case Qualified | [2RoiAdfv…](https://testnet.nearblocks.io/txns/2RoiAdfvq7jqqNXdRgxF73ghgee8KrGHfrcVd1aum9GE) |
 | 5.6 | `arbitrate` 1 invalid | verifier.proofee-anton.testnet | milestone **Rejected**, case Settled ProofInvalidFinal; bond **Refunded**; stranger −0.0013 (gas only) | [2bYLpXnH…](https://testnet.nearblocks.io/txns/2bYLpXnHKtQ2BvUESrxFnjUbXPBi3RsqeYqaNFL7Ru9S) |
 | 6 | `sync` | proofee-stranger.testnet | total_received **still 1**; unlocked 0.15, forfeited 0.25, pending 0.4, claimable 0.35; buyback 1 NEAR; goal-5 balance 4 NEAR (3 + 1 fees, no bond) | [39j6fazY…](https://testnet.nearblocks.io/txns/39j6fazYgjXX9qCs5mo9svp1N93zA3sW7fGZr3P6LCYe) |
+| 7a | `claim` | proofee-anton.testnet | `claimed` 0.35 = immediate 0.2 + milestone 0 unlocked 0.15; goal-5 balance 4 → 3.65 (exactly −0.35), creator +0.3496 (0.35 − gas); total_received still 1, buyback still 1: no bond in the payout | [G1Z7L832…](https://testnet.nearblocks.io/txns/G1Z7L832NU1EXnQKTddojJUkRVk5MeVyN6xvwBcRBw1j) |
+| 7b | second `claim` (expected failure) | proofee-anton.testnet | fails with `Nothing to claim` | [HpbMncVx…](https://testnet.nearblocks.io/txns/HpbMncVxAfAnsHV4VsUgHLzozSh77sxZygNtS3zb2N8i) |
 
 Final state: milestone 0 Accepted (m0-2 ProofValid, bond slashed), milestone 1 Rejected (m1-1
 ProofInvalidFinal, bond refunded), milestone 2 Pending. Treasury: 3 bonds — `026a1a1e…` Refunded,

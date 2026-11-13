@@ -1,0 +1,20 @@
+{
+  "amount": "1000000000000000000000000",
+  "attempt": 0,
+  "bind_until_ns": 1794600612780387755,
+  "case_id": "m0-2",
+  "created_at_ns": 1794599419531049858,
+  "decision": "ProofValid",
+  "demo": false,
+  "deposit_until_ns": 1794600012780387755,
+  "escrow_id": "d1bf875d2c5e952be5305cf2a4c91b1aeebce2d05ed9a86d5b77afcd385654e6",
+  "goal": "goal-5.proofee-anton.testnet",
+  "outcome": "SLASH",
+  "payer": "proofee-stranger.testnet",
+  "proof_id": "0:a11429a8997cdc318165b8d332bd66fa50f174ba6dcd32ac8c7275ca64fa6c5d:2",
+  "refund_after_ns": 1794687012780387755,
+  "reward_cap": "15000000000000000000000",
+  "settlement_id": "bond:m0-2",
+  "status": "Slashed",
+  "submission_id": "0"
+}

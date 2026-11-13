@@ -1,0 +1,23 @@
+{
+  "signer": "verifier.proofee-anton.testnet",
+  "transaction": {
+    "receiverId": "goal-5.proofee-anton.testnet",
+    "actions": [
+      {
+        "type": "FunctionCall",
+        "params": {
+          "methodName": "qualify",
+          "args": {
+            "index": 0,
+            "qualified": false
+          },
+          "gas": "300000000000000",
+          "deposit": "0"
+        }
+      }
+    ]
+  },
+  "tx_hash": "EgPzisJsgadQr6rgV8R5DZGFXJS7cCShJRQLmMXkbaUX",
+  "explorer": "https://testnet.nearblocks.io/txns/EgPzisJsgadQr6rgV8R5DZGFXJS7cCShJRQLmMXkbaUX",
+  "result": "returns true; milestone back to Submitted, challenger cleared, case stage Settled, decision QualificationRejected; get_bond status Refunded, outcome REFUND, settlement_id bond:m0-1; bond returned to the payer in the same transaction"
+}
