@@ -4,8 +4,10 @@ use near_sdk::{AccountId, Gas, NearToken, PanicOnDefault, Promise, env, near, re
 
 mod events;
 mod math;
+mod treasury;
 
 use math::BPS_DENOMINATOR;
+pub use treasury::{CaseStage, ChallengeCase, Decision};
 
 const MIN_MILESTONES: usize = 3;
 const MAX_MILESTONES: usize = 5;
@@ -24,7 +26,11 @@ const MAX_DEADLINE_AHEAD_MS: u64 = 365 * DAY_MS;
 /// `payout_in_flight` and state growth: a full goal state is ≈ 15 KB.
 const STORAGE_RESERVE_BYTES: u64 = 16_000;
 /// How long the verifier has to resolve a dispute; after that the milestone is accepted for the creator (SPEC 6).
+#[cfg(not(feature = "short-timeouts"))]
 const RESOLVE_TIMEOUT_MS: u64 = DAY_MS;
+/// Test-only build for the sandbox (SPEC 6a); the release wasm is built without this feature.
+#[cfg(feature = "short-timeouts")]
+const RESOLVE_TIMEOUT_MS: u64 = 300_000;
 
 /// A milestone as passed to `new`.
 #[near(serializers = [json])]
@@ -58,6 +64,10 @@ pub struct Milestone {
     pub challenger: Option<AccountId>,
     pub challenge_reason: Option<String>,
     pub challenged_at_ms: Option<u64>,
+    /// Bonded challenge requests ever made on this milestone (unique Treasury ids, SPEC 6a).
+    pub challenge_attempts: u32,
+    /// The latest bonded challenge request; a new one replaces it.
+    pub case: Option<ChallengeCase>,
 }
 
 /// `get_goal` response: goal parameters and milestones. Money is in `get_balances`.
@@ -72,6 +82,7 @@ pub struct GoalView {
     pub immediate_bps: u16,
     pub challenge_window_ms: u64,
     pub milestones: Vec<Milestone>,
+    pub treasury: Option<AccountId>,
 }
 
 /// `get_balances` response. Formulas: SPEC 5.2; amounts in yoctoNEAR (strings in JSON).
@@ -107,6 +118,8 @@ pub struct Goal {
     last_balance: NearToken,
     /// Payout whose callback has not arrived yet. While set, `sync` and `claim` are blocked.
     payout_in_flight: Option<NearToken>,
+    /// Bond Treasury; None = free challenge (SPEC 6a). Never changes after `new`.
+    treasury: Option<AccountId>,
 }
 
 fn title_ok(title: &str) -> bool {
@@ -157,12 +170,19 @@ impl Goal {
         immediate_bps: u16,
         challenge_window_ms: u64,
         milestones: Vec<MilestoneInput>,
+        treasury: Option<AccountId>,
     ) -> Self {
         require!(creator != verifier, "Creator and verifier must differ");
         // The goal has no keys: nobody can call claim or resolve on its behalf.
         let this = env::current_account_id();
         require!(creator != this, "Creator cannot be the contract");
         require!(verifier != this, "Verifier cannot be the contract");
+        if let Some(t) = &treasury {
+            require!(
+                *t != this && *t != creator && *t != verifier,
+                "Treasury cannot be the contract, creator or verifier"
+            );
+        }
         require!(title_ok(&goal_title), "Goal title must be 1-100 chars");
         require!(goal_uri.chars().count() <= MAX_URI_LEN, "URI too long");
         require!(is_sha256_hex(&goal_spec_hash), "Invalid goal spec hash");
@@ -215,6 +235,8 @@ impl Goal {
                 challenger: None,
                 challenge_reason: None,
                 challenged_at_ms: None,
+                challenge_attempts: 0,
+                case: None,
             })
             .collect::<Vec<_>>();
 
@@ -250,6 +272,7 @@ impl Goal {
             // The initial deposit is not income (SPEC 5.1).
             last_balance: env::account_balance(),
             payout_in_flight: None,
+            treasury,
         }
     }
 
@@ -320,6 +343,7 @@ impl Goal {
     /// Submitted → Challenged. Anyone except the creator and the verifier, while the window is open.
     /// The verifier would be judging their own challenge (AUDIT M-3).
     pub fn challenge(&mut self, index: u8, reason: String) {
+        require!(self.treasury.is_none(), "Bond required");
         self.check_index(index);
         let challenger = env::predecessor_account_id();
         require!(challenger != self.creator, "Creator cannot challenge");
@@ -349,6 +373,13 @@ impl Goal {
         let m = &mut self.milestones[usize::from(index)];
         require!(m.status == MilestoneStatus::Submitted, "Wrong status");
         require!(now_ms >= window_end(m, window_ms), "Window still open");
+        // An unbound bonded request blocks finalize only until its bind_until (SPEC 6a).
+        if let Some(c) = &m.case {
+            require!(
+                !c.blocks_finalize(env::block_timestamp()),
+                "Challenge in progress"
+            );
+        }
 
         m.status = MilestoneStatus::Accepted;
         emit_resolved(index, &m.status);
@@ -356,6 +387,7 @@ impl Goal {
 
     /// Challenged → Accepted / Rejected. Verifier only, within 24 h of the challenge.
     pub fn resolve(&mut self, index: u8, accept: bool) {
+        require!(self.treasury.is_none(), "Use arbitrate");
         self.check_index(index);
         require!(
             env::predecessor_account_id() == self.verifier,
@@ -375,15 +407,26 @@ impl Goal {
     }
 
     /// Challenged → Accepted. Anyone, if the verifier has not resolved the dispute within 24 h (AUDIT M-1).
-    pub fn resolve_timeout(&mut self, index: u8) {
+    /// In Treasury mode the deadline is the case's `refund_after`, and the bond is returned
+    /// neutrally through Treasury `refund_expired` (SPEC 6a).
+    pub fn resolve_timeout(&mut self, index: u8) -> Option<Promise> {
         self.check_index(index);
         let now_ms = env::block_timestamp_ms();
+        require!(
+            self.milestones[usize::from(index)].status == MilestoneStatus::Challenged,
+            "Wrong status"
+        );
+        let promise = if self.treasury.is_some() {
+            Some(self.timeout_case(index))
+        } else {
+            let m = &self.milestones[usize::from(index)];
+            require!(now_ms >= resolve_deadline(m), "Resolve time not passed");
+            None
+        };
         let m = &mut self.milestones[usize::from(index)];
-        require!(m.status == MilestoneStatus::Challenged, "Wrong status");
-        require!(now_ms >= resolve_deadline(m), "Resolve time not passed");
-
         m.status = MilestoneStatus::Accepted;
         emit_resolved(index, &m.status);
+        promise
     }
 
     /// Pending → Failed. Anyone, after the deadline.
@@ -491,6 +534,7 @@ impl Goal {
             immediate_bps: self.immediate_bps,
             challenge_window_ms: self.challenge_window_ms,
             milestones: self.milestones.clone(),
+            treasury: self.treasury.clone(),
         }
     }
 }
@@ -569,7 +613,11 @@ mod tests {
 
     /// Context: `predecessor` calls at NOW_MS, the contract balance is 5 NEAR.
     fn set_context(predecessor: AccountId) {
-        set_context_with(predecessor, NearToken::from_near(5), NearToken::from_near(0));
+        set_context_with(
+            predecessor,
+            NearToken::from_near(5),
+            NearToken::from_near(0),
+        );
     }
 
     /// `balance` is the balance before the deposit. The runtime (and the near-sdk mock) adds
@@ -592,7 +640,12 @@ mod tests {
 
     /// Call from `predecessor` at `now_ms`, balance 5 NEAR.
     fn set_time(predecessor: AccountId, now_ms: u64) {
-        set_env(predecessor, now_ms, NearToken::from_near(5), NearToken::from_near(0));
+        set_env(
+            predecessor,
+            now_ms,
+            NearToken::from_near(5),
+            NearToken::from_near(0),
+        );
     }
 
     fn milestones(weights: &[u16]) -> Vec<MilestoneInput> {
@@ -620,6 +673,7 @@ mod tests {
             5000,
             120_000,
             milestones,
+            None,
         )
     }
 
@@ -640,6 +694,7 @@ mod tests {
             immediate_bps,
             challenge_window_ms,
             milestones,
+            None,
         )
     }
 
@@ -728,14 +783,26 @@ mod tests {
     #[should_panic(expected = "Goal title must be 1-100 chars")]
     fn new_rejects_long_goal_title() {
         set_context(creator());
-        new_goal_with(&"a".repeat(101), "", 5000, 120_000, milestones(&[4000, 3000, 3000]));
+        new_goal_with(
+            &"a".repeat(101),
+            "",
+            5000,
+            120_000,
+            milestones(&[4000, 3000, 3000]),
+        );
     }
 
     #[test]
     #[should_panic(expected = "URI too long")]
     fn new_rejects_long_goal_uri() {
         set_context(creator());
-        new_goal_with("Goal", &"a".repeat(257), 5000, 120_000, milestones(&[4000, 3000, 3000]));
+        new_goal_with(
+            "Goal",
+            &"a".repeat(257),
+            5000,
+            120_000,
+            milestones(&[4000, 3000, 3000]),
+        );
     }
 
     #[test]
@@ -774,7 +841,13 @@ mod tests {
     #[should_panic(expected = "Window too long")]
     fn new_rejects_window_above_30_days() {
         set_context(creator());
-        new_goal_with("Goal", "", 5000, 30 * DAY_MS + 1, milestones(&[4000, 3000, 3000]));
+        new_goal_with(
+            "Goal",
+            "",
+            5000,
+            30 * DAY_MS + 1,
+            milestones(&[4000, 3000, 3000]),
+        );
     }
 
     // AUDIT L-3: a deadline far in the future kept the milestone from ever failing.
@@ -832,6 +905,7 @@ mod tests {
             5000,
             120_000,
             milestones(&[4000, 3000, 3000]),
+            None,
         );
     }
 
@@ -840,7 +914,10 @@ mod tests {
     #[should_panic(expected = "Verifier cannot be the contract")]
     fn new_rejects_verifier_equal_to_contract() {
         set_context(creator());
-        new_goal("goal.testnet".parse().unwrap(), milestones(&[4000, 3000, 3000]));
+        new_goal(
+            "goal.testnet".parse().unwrap(),
+            milestones(&[4000, 3000, 3000]),
+        );
     }
 
     #[test]
@@ -888,10 +965,16 @@ mod tests {
                     5000,
                     120_000,
                     milestones(&[4000, 3000, 3000]),
+                    None,
                 )
             });
-            let err = result.err().unwrap_or_else(|| panic!("hash {hash:?} must be rejected"));
-            let msg = err.downcast_ref::<String>().map(String::as_str).unwrap_or("");
+            let err = result
+                .err()
+                .unwrap_or_else(|| panic!("hash {hash:?} must be rejected"));
+            let msg = err
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .unwrap_or("");
             assert!(msg.contains("Invalid goal spec hash"), "{hash:?}: {msg}");
         }
     }
@@ -964,7 +1047,11 @@ mod tests {
         let mut goal = new_goal(verifier(), milestones(&[4000, 3000, 3000]));
 
         // 10 NEAR arrived at the contract as a plain transfer.
-        set_context_with(stranger(), NearToken::from_near(15), NearToken::from_near(0));
+        set_context_with(
+            stranger(),
+            NearToken::from_near(15),
+            NearToken::from_near(0),
+        );
         assert_eq!(goal.get_balances().unsynced, NearToken::from_near(10));
 
         goal.sync();
@@ -1083,10 +1170,10 @@ mod tests {
     #[test]
     fn submit_proof_checks_hash() {
         let bad = [
-            HASH.to_uppercase(),           // upper case
-            HASH[..63].to_string(),        // 63 characters
-            format!("{}g", &HASH[..63]),   // not hex
-            format!("{HASH}0"),            // 65 characters
+            HASH.to_uppercase(),         // upper case
+            HASH[..63].to_string(),      // 63 characters
+            format!("{}g", &HASH[..63]), // not hex
+            format!("{HASH}0"),          // 65 characters
         ];
         for hash in bad {
             let mut goal = goal3();
@@ -1095,7 +1182,10 @@ mod tests {
                 goal.submit_proof(0, URI.to_string(), hash.clone())
             }));
             let err = result.expect_err(&format!("hash {hash} must be rejected"));
-            let msg = err.downcast_ref::<String>().map(String::as_str).unwrap_or("");
+            let msg = err
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .unwrap_or("");
             assert!(msg.contains("Invalid proof hash"), "{hash}: {msg}");
         }
     }
@@ -1253,7 +1343,10 @@ mod tests {
         set_time(verifier(), NOW_MS + 2);
         goal.resolve(1, true);
         assert_eq!(status(&goal, 1), MilestoneStatus::Accepted);
-        assert_eq!(goal.get_balances().unlocked, NearToken::from_millinear(1500));
+        assert_eq!(
+            goal.get_balances().unlocked,
+            NearToken::from_millinear(1500)
+        );
     }
 
     #[test]
@@ -1335,7 +1428,10 @@ mod tests {
         let mut goal = challenged(1);
         set_time(verifier(), NOW_MS + 2);
         goal.resolve(1, false);
-        assert_eq!(goal.get_balances().forfeited, NearToken::from_millinear(1500));
+        assert_eq!(
+            goal.get_balances().forfeited,
+            NearToken::from_millinear(1500)
+        );
 
         // After the rejection another 10 NEAR arrived: 20 in total, 10 locked.
         receive_and_sync(&mut goal, 20);
@@ -1364,7 +1460,10 @@ mod tests {
         goal.expire(2);
         assert_eq!(status(&goal, 2), MilestoneStatus::Failed);
         assert!(get_logs()[0].contains(r#""status":"Failed""#));
-        assert_eq!(goal.get_balances().forfeited, NearToken::from_millinear(1500));
+        assert_eq!(
+            goal.get_balances().forfeited,
+            NearToken::from_millinear(1500)
+        );
     }
 
     #[test]
@@ -1478,7 +1577,11 @@ mod tests {
     fn claim_rejects_verifier() {
         let mut goal = goal3();
         receive_and_sync(&mut goal, 10);
-        set_context_with(verifier(), NearToken::from_near(15), NearToken::from_near(0));
+        set_context_with(
+            verifier(),
+            NearToken::from_near(15),
+            NearToken::from_near(0),
+        );
         let _ = goal.claim();
     }
 
@@ -1525,7 +1628,11 @@ mod tests {
         set_time(verifier(), NOW_MS + WINDOW_MS + 2);
         goal.resolve(1, false);
 
-        set_context_with(creator(), NearToken::from_near(105), NearToken::from_near(0));
+        set_context_with(
+            creator(),
+            NearToken::from_near(105),
+            NearToken::from_near(0),
+        );
         let _ = goal.claim();
         assert_eq!(goal.claimed, NearToken::from_near(70));
         assert_eq!(goal.get_balances().forfeited, NearToken::from_near(15));

@@ -60,3 +60,7 @@ overflow-checks = true
 [lints.rust.unexpected_cfgs]
 level = "warn"
 check-cfg = ['cfg(near)']
+
+[features]
+# Test-only: short dispute deadlines for sandbox tests (SPEC 6a). Never for deploy.
+short-timeouts = []

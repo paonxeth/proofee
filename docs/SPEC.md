@@ -221,8 +221,8 @@ At `prepare_challenge` (time `t0`, nanoseconds, `ms × 1_000_000` with `checked_
 and the goal's boundary is exactly the Treasury's (`settle_bond` and `authorize_decision` require
 `now < refund_after`, `refund_expired` requires `now ≥ refund_after`).
 
-The test-only Cargo feature `short-timeouts` shortens these constants for sandbox tests; the release
-wasm is built without it.
+The test-only Cargo feature `short-timeouts` shortens these constants for sandbox tests
+(`RESOLVE_TIMEOUT_MS` 300000, both windows 60000); the release wasm is built without it.
 
 ### Transitions
 
@@ -262,8 +262,9 @@ mismatch they return `false` and change nothing.
 | `on_settled` | Settled (instruction accepted; the final Refunded/Slashed is Treasury `get_bond`) | SettlementRetryable |
 | `on_timeout_refund` | event only | event only (the refund is permissionless in the Treasury) |
 
-Gas: `register_intent` 35 + callback 15, `get_bond` 15 + 80, `bind_bond` 35 + 15,
-`authorize_decision` 35 + 85, `settle_bond` 60 + 15, `refund_expired` 60 + 15 TGas. Callers attach 300 TGas.
+Gas: `register_intent` 35 + callback 15, `get_bond` 15 + `on_verified` 65, `bind_bond` 35 + 15,
+`authorize_decision` 35 + `on_decided` 125, `settle_bond` 100 + 15, `refund_expired` 100 + 15 TGas
+(the Treasury ABI asks for at least 100 TGas for settlement). Callers attach 300 TGas.
 A repeated settlement cannot pay twice: the Treasury treats the same `settlement_id` as a no-op and
 rejects a different one.
 
