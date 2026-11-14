@@ -67,6 +67,8 @@ jobs:
           trap 'echo "FAIL sandbox $CONTRACT"' ERR
           if [[ "$CONTRACT" == goal ]]; then
             rustup toolchain install 1.95.0 --profile minimal --target wasm32-unknown-unknown
+            # cargo-near pulls hidapi (Ledger support), whose build script needs libudev
+            sudo apt-get update -qq && sudo apt-get install -y -qq libudev-dev pkg-config
             cargo +1.95.0 install cargo-near --version 0.23.0 --locked
             cd contracts/goal
             RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --tests -- --test-threads=1
