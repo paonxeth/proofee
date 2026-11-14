@@ -1,23 +1,113 @@
 # ProoFee
 
-ProoFee is an escrow contract for memecoin fees on NEAR. Token fees go not to the creator directly
-but to a goal contract. The creator can claim part of them immediately; the rest unlocks milestone by
-milestone: the creator publishes a proof, the community can challenge it, and the verifier resolves the dispute.
+**Memecoin creator fees locked in an on-chain goal on NEAR and paid out only as public milestones are
+accepted, so a creator cannot take all the fees and walk away.**
 
-NEAR hackathon, track 11. Testnet only.
-
+NEAR Hackathon 2026, memecoins track (track 11). **Testnet only**, nothing is deployed on mainnet.
 The code was written with the help of Claude Code and Codex (hackathon rule Q-005).
 
-## Modules
+## Try the live demo
 
-Everything is deployed and verified on NEAR testnet only.
+Everything below runs on NEAR testnet. You need no wallet and no keys: the page reads the contracts
+over JSON-RPC in your browser, and every step links to its transaction on nearblocks.
 
-| Module | What it is |
-| --- | --- |
-| [contracts/goal](contracts/goal) | The goal escrow contract (Rust, near-sdk 5): fee accounting, milestones, challenges (free, or bonded through the Bond Treasury), `claim`. Described below and in [docs/SPEC.md](docs/SPEC.md). |
-| [bond-treasury](bond-treasury) | Bond Treasury v0.2 (Rust): holds challenge bonds, refunds them or slashes them to a buyback reserve. **Connected to the goal contract:** a goal created with `treasury` takes challenges only with a bond; run on testnet with [`goal-5`](#demo-goal-5-bonded-challenges). Earlier runs against its Mock Goal: [TESTNET_RESULTS.md](bond-treasury/TESTNET_RESULTS.md). |
-| [launcher](launcher) | Testnet launcher (Node.js) and an immutable LP Locker (Rust): creates a token, a Rhea DCL pool and a locked LP position, converts LP fees to NEAR and sends them to a goal. See [REPORT.md](launcher/REPORT.md). |
-| [client](client) | Framework-free TypeScript client: reads a goal over JSON-RPC and builds unsigned transactions. Live page below. |
+**Goal 5, bonded challenges** (a challenge costs a bond held by the Bond Treasury):
+
+Milestones are numbered from 1 here and on the page. Contract calls and request ids use an index
+from 0: milestone 1 is `index: 0`, and request `m0-2` is the second request on milestone 1.
+
+1. Open [paonxeth.github.io/proofee/client/demo.html](https://paonxeth.github.io/proofee/client/demo.html)
+   → you see "Ship ProoFee on NEAR testnet (bonded challenges)": three milestones, fee balances,
+   the goal spec hash check, links to the goal and the Treasury.
+2. Look at milestone 1 → **Accepted**; its request `m0-2` is Settled and the bond is **Slashed**
+   (the challenger was wrong, the bond went to the buyback reserve). An earlier request on this
+   milestone, `m0-1`, was not qualified and its bond was refunded (see the run log).
+3. Look at milestone 2 → **Rejected**; request `m1-1` is Settled and the bond is **Refunded**
+   (the challenger was right; they get the bond back, there is no extra reward).
+4. Look at milestone 3 → **Pending**: no proof yet.
+5. Click the goal link → on [nearblocks](https://testnet.nearblocks.io/address/goal-5.proofee-anton.testnet)
+   you see every call of the run; the step-by-step list with each transaction is in
+   [Demo goal 5](#demo-goal-5-bonded-challenges) below.
+
+**Goal 4, free challenges** (the original mode, no Treasury):
+
+1. Open [demo.html?goal=goal-4.proofee-anton.testnet](https://paonxeth.github.io/proofee/client/demo.html?goal=goal-4.proofee-anton.testnet)
+   → milestone 1 **Accepted** (no challenge in the window), milestone 2 **Rejected** (challenged,
+   the verifier rejected it), milestone 3 Pending.
+2. The creator claimed 0.7 NEAR; the run with transactions is in [docs/DEMO_RUN.md](docs/DEMO_RUN.md).
+
+## What we built
+
+Statuses as in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md): **Testnet verified**
+= run on testnet with a transaction; **Implemented** = in code and covered by tests, not run on
+testnet; **Planned** = not built.
+
+| Module | What it is | Status |
+| --- | --- | --- |
+| [contracts/goal](contracts/goal) | The goal escrow contract (Rust, near-sdk 5): fee accounting, immediate share, milestones, proofs, challenges, `claim`. No admin methods. [docs/SPEC.md](docs/SPEC.md) | Testnet verified (goal-4, goal-5) |
+| Free challenges | anyone challenges, the verifier resolves | Testnet verified (goal-4) |
+| Bonded challenges | the goal is connected to [bond-treasury](bond-treasury) (Bond Treasury v0.2): bond, qualify, arbitrate, refund or slash. Earlier Treasury runs against its Mock Goal: [TESTNET_RESULTS.md](bond-treasury/TESTNET_RESULTS.md) | Testnet verified (goal-5) |
+| 24 h dispute timeout, retries of failed Treasury calls | `resolve_timeout`, `*Retryable` stages | Implemented (24 h does not fit in a testnet demo) |
+| [launcher](launcher) | Node.js CLI and an immutable LP Locker (Rust): token, Rhea DCL pool, locked LP position, LP fees converted to NEAR and sent to a goal. [REPORT.md](launcher/REPORT.md) | Testnet verified, CLI only |
+| [client](client) | Framework-free TypeScript client: reads a goal and Treasury bonds, builds unsigned transactions for a wallet; the read-only live page | Reading: testnet verified (live tests, live page). Transaction builders: unit tests only |
+| Web app for trading or launching tokens | — | Planned: there is no web trading UI; launches go through the CLI |
+| Reward for a successful challenger | — | Planned: a correct challenger only gets the bond back |
+| Parallel challenge requests (fix for AUDIT M-4) | — | Planned |
+| Mainnet deployment | — | Planned: testnet only |
+
+## Known limitations
+
+What this does not do, honestly. Codes like M-4 refer to findings in [docs/AUDIT.md](docs/AUDIT.md),
+where each one has its fix status.
+
+- **Testnet only.** Nothing is deployed on mainnet.
+- **No independent audit.** [docs/AUDIT.md](docs/AUDIT.md) is our own review against the
+  `near-contract-audit` checklist, with its findings and their fix status; no third party has
+  audited the contracts.
+- **No web trading.** Tokens are launched and traded through the [launcher](launcher) CLI and Rhea
+  DCL directly; the live page only reads goals.
+- **No reward for a successful challenger.** A correct challenge only gets its bond back; a
+  slashed bond goes to the buyback reserve, not to anyone.
+- **Do not send tokens (NEP-141) to a goal, including the memecoin itself and wNEAR.** The contract accounts
+  for NEAR only. `ft_transfer` to a goal is an irreversible loss; `ft_transfer_call` fails and the
+  tokens are returned.
+- The verifier cannot challenge from their own account, but can from a second one and then reject
+  the milestone. With a Bond Treasury such a challenge costs a bond; real protection still needs a
+  multisig or DAO verifier (M-3).
+- Bonded challenges: one request at a time per milestone, so a creator with a second account can
+  file empty requests and block real challengers (M-4, open; see [Demo goal 5](#demo-goal-5-bonded-challenges)).
+- If the creator deletes their top-level account, someone else can take the name and
+  claim the claimable amount (L-5).
+- In the demo the creator and the verifier belong to the same person: the verifier is a
+  subaccount of `MASTER`. Real goals must not do this (L-5).
+- Methods do not require 1 yoctoNEAR, so they can be called with a function-call key without
+  wallet confirmation. A leaked function-call key of the verifier would allow rejecting milestones (L-6).
+- While a payout is in flight, `unsynced` in `get_balances` may show an arrived refund as
+  income (I-2). A challenge sent in the last seconds of the window may not make it in time (I-7).
+
+## Quickstart for judges
+
+**Without keys (2 minutes).** Open the [live demo](https://paonxeth.github.io/proofee/client/demo.html)
+and follow [Try the live demo](#try-the-live-demo). Check any number against the chain:
+[goal-5](https://testnet.nearblocks.io/address/goal-5.proofee-anton.testnet),
+[Bond Treasury](https://testnet.nearblocks.io/address/treasury.proofee-bond-lab-20261112-1794481933490.testnet),
+[goal-4](https://testnet.nearblocks.io/address/goal-4.proofee-anton.testnet) on nearblocks, and the
+transaction tables in [docs/DEMO_RUN_TREASURY.md](docs/DEMO_RUN_TREASURY.md) and
+[docs/DEMO_RUN.md](docs/DEMO_RUN.md).
+
+**Locally.** Nothing here sends transactions.
+
+```sh
+git clone https://github.com/paonxeth/proofee && cd proofee
+
+# client: Node.js 23.6 or newer (runs the TypeScript tests directly; checked on 26)
+cd client && npm install && npm test   # offline unit tests
+npm run test:live                      # read-only: goal-4 and goal-5 on testnet match the run logs
+cd ..
+
+# contract: Rust (pinned in contracts/goal/rust-toolchain.toml)
+cd contracts/goal && cargo test        # unit + sandbox tests; the first run downloads near-sandbox
+```
 
 ## How the contract works
 
@@ -57,19 +147,19 @@ Do X → see Y (fees: 1 NEAR, so F = 0.15 / 0.25 NEAR and every bond is the 1 NE
 
 1. Challenger files a request with an empty reason, deposits 1 NEAR into the Treasury, confirms
    ([prepare](https://testnet.nearblocks.io/txns/HqypaBASGyHZFPM5CWaAp74LKeZoUAQdsYBmPga42r2X), [deposit](https://testnet.nearblocks.io/txns/cK5XTDDqNZWjwWcbKYaJu74HMvpGnqXNqR5MnUqFFVA), [confirm](https://testnet.nearblocks.io/txns/9xXnwLxdfLb831kkS8dSHJeFnyFqvKArWZUaDo6oGVqt))
-   → milestone 0 Challenged, bond Bound.
+   → milestone 1 Challenged, bond Bound.
 2. Verifier: `qualify(false)` ([EgPzisJs](https://testnet.nearblocks.io/txns/EgPzisJsgadQr6rgV8R5DZGFXJS7cCShJRQLmMXkbaUX)) → bond **refunded** to the challenger in the
-   same transaction, milestone 0 back to Submitted.
+   same transaction, milestone 1 back to Submitted.
 3. Second request on the same milestone ([prepare](https://testnet.nearblocks.io/txns/Gk7RKH91EMoaJFbvt5XwgBeUMQtmZerr4VtQU3N5ugqs), [deposit](https://testnet.nearblocks.io/txns/vQ2TnqVQRiWDUxiwnEzLeTPE5rs9A2oCtRxZypMUhW7), [confirm](https://testnet.nearblocks.io/txns/3ysmPXjmQ6H2Kp1UdjSjgRbWyVpN4wAVgNXibLRXcvLr)), verifier
-   `qualify(true)` ([CXtr1rQv](https://testnet.nearblocks.io/txns/CXtr1rQvPrFBrnqG8Y8891knKPCNiviuDFeUNXuYYVge)) and `arbitrate(valid)` ([3D5YQZoS](https://testnet.nearblocks.io/txns/3D5YQZoS2aMMMTkjA6nKeaVnWrmJC27YWqQijqUmqXpK)) → milestone 0
+   `qualify(true)` ([CXtr1rQv](https://testnet.nearblocks.io/txns/CXtr1rQvPrFBrnqG8Y8891knKPCNiviuDFeUNXuYYVge)) and `arbitrate(valid)` ([3D5YQZoS](https://testnet.nearblocks.io/txns/3D5YQZoS2aMMMTkjA6nKeaVnWrmJC27YWqQijqUmqXpK)) → milestone 1
    **Accepted**, bond **slashed**: Treasury `get_buyback_balance(goal-5)` = 1 NEAR.
-4. Milestone 1, weak proof, challenged ([prepare](https://testnet.nearblocks.io/txns/GkX2iKTVcv8fWcLbA4f66Jm5qN5Y8sF9k5YNsxxX2Jw5), [deposit](https://testnet.nearblocks.io/txns/AkUJMpDtPusDoEqUbE445fDeSSginY55XcNPtmwf1wao), [confirm](https://testnet.nearblocks.io/txns/7dXPHLiSHnhVrAd3HbyPAQ5WoJ67tW1o7L3Ap8bfarqV)), qualified ([2RoiAdfv](https://testnet.nearblocks.io/txns/2RoiAdfvq7jqqNXdRgxF73ghgee8KrGHfrcVd1aum9GE)),
-   `arbitrate(invalid)` ([2bYLpXnH](https://testnet.nearblocks.io/txns/2bYLpXnHKtQ2BvUESrxFnjUbXPBi3RsqeYqaNFL7Ru9S)) → milestone 1 **Rejected**, bond **refunded**.
+4. Milestone 2, weak proof, challenged ([prepare](https://testnet.nearblocks.io/txns/GkX2iKTVcv8fWcLbA4f66Jm5qN5Y8sF9k5YNsxxX2Jw5), [deposit](https://testnet.nearblocks.io/txns/AkUJMpDtPusDoEqUbE445fDeSSginY55XcNPtmwf1wao), [confirm](https://testnet.nearblocks.io/txns/7dXPHLiSHnhVrAd3HbyPAQ5WoJ67tW1o7L3Ap8bfarqV)), qualified ([2RoiAdfv](https://testnet.nearblocks.io/txns/2RoiAdfvq7jqqNXdRgxF73ghgee8KrGHfrcVd1aum9GE)),
+   `arbitrate(invalid)` ([2bYLpXnH](https://testnet.nearblocks.io/txns/2bYLpXnHKtQ2BvUESrxFnjUbXPBi3RsqeYqaNFL7Ru9S)) → milestone 2 **Rejected**, bond **refunded**.
 5. `sync` ([39j6fazY](https://testnet.nearblocks.io/txns/39j6fazYgjXX9qCs5mo9svp1N93zA3sW7fGZr3P6LCYe)) → `total_received` is still 1 NEAR: bonds never become goal income.
-6. Creator `claim` ([G1Z7L832](https://testnet.nearblocks.io/txns/G1Z7L832NU1EXnQKTddojJUkRVk5MeVyN6xvwBcRBw1j)) → 0.35 NEAR = 0.2 immediate + 0.15 of milestone 0; a
+6. Creator `claim` ([G1Z7L832](https://testnet.nearblocks.io/txns/G1Z7L832NU1EXnQKTddojJUkRVk5MeVyN6xvwBcRBw1j)) → 0.35 NEAR = 0.2 immediate + 0.15 of milestone 1; a
    second `claim` fails with `Nothing to claim` ([HpbMncVx](https://testnet.nearblocks.io/txns/HpbMncVxAfAnsHV4VsUgHLzozSh77sxZygNtS3zb2N8i)).
 
-Result: milestone 0 Accepted, 1 Rejected, 2 Pending (closed later by a real post on X); bonds
+Result: milestone 1 Accepted, 2 Rejected, 3 Pending (closed later by a real post on X); bonds
 Refunded / Slashed / Refunded. The challenger got both refunds back in full (gas only) and lost the
 slashed bond.
 
@@ -157,27 +247,6 @@ pushed. The script passes `goal_uri` as a raw GitHub link pinned to the commit a
 
 The script builds the wasm and creates the goal in one transaction from `MASTER`: account, 3 NEAR, code and
 `new`. The goal has no keys; NEAR can leave it only through `claim`.
-
-## Known limitations
-
-Details: the "Fix status" section in [docs/AUDIT.md](docs/AUDIT.md).
-
-- **Do not send tokens (NEP-141) to a goal, including the memecoin itself and wNEAR.** The contract accounts
-  for NEAR only. `ft_transfer` to a goal is an irreversible loss; `ft_transfer_call` fails and the
-  tokens are returned.
-- The verifier cannot challenge from their own account, but can from a second one and then reject
-  the milestone. With a Bond Treasury such a challenge costs a bond; real protection still needs a
-  multisig or DAO verifier (M-3).
-- Bonded challenges: no reward for a successful challenger; one request at a time per milestone,
-  so empty requests can block real challengers (M-4, see goal-5 above).
-- If the creator deletes their top-level account, someone else can take the name and
-  claim the claimable amount (L-5).
-- In the demo the creator and the verifier belong to the same person: the verifier is a
-  subaccount of `MASTER`. Real goals must not do this (L-5).
-- Methods do not require 1 yoctoNEAR, so they can be called with a function-call key without
-  wallet confirmation. A leaked function-call key of the verifier would allow rejecting milestones (L-6).
-- While a payout is in flight, `unsynced` in `get_balances` may show an arrived refund as
-  income (I-2). A challenge sent in the last seconds of the window may not make it in time (I-7).
 
 ## License
 

@@ -7,7 +7,14 @@ NEAR hackathon, track 11. Deadline: 14 November, 23:59 UTC. Demo: testnet only.
 - docs/SPEC.md — contract specification. The source of truth. Do not change behavior without editing SPEC.
 - docs/DECISIONS.md — decisions made.
 - contracts/goal — the contract in Rust, near-sdk 5.
-- app — frontend on Next.js 16. The version is new: check the documentation, not your memory.
+- contracts/goal/tests — sandbox tests (integration.rs; treasury.rs against the real Bond Treasury wasm).
+- bond-treasury — Bond Treasury v0.2 (Rust): challenge bonds, refund or slash to a buyback reserve.
+- launcher — testnet launcher (Node.js CLI) and the LP Locker contract (Rust). Not a web app.
+- client — framework-free TypeScript client (src/index.ts → dist/) and the read-only demo page client/demo.html,
+  served by GitHub Pages from main. There is no Next.js app in the repository.
+- release/goal-treasury — release package of the goal wasm for the frontend (ABI, errors, permissions, examples).
+- scripts — deploy-testnet.sh and goal parameter files; specs — goal spec JSON files.
+- docs — also AUDIT.md (internal review), IMPLEMENTATION_STATUS.md, DEMO_RUN*.md (testnet run logs).
 
 ## Contract rules
 - No admin methods and no parameter changes after new.
