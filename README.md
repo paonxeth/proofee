@@ -1,12 +1,25 @@
 # ProoFee
 
-**Memecoin creator fees locked in an on-chain goal on NEAR and paid out only as public milestones are
-accepted, so a creator cannot take all the fees and walk away.**
+**Turn ideas into tokens. Turn progress into proof.**
+
+ProoFee is a social launchpad for **goal-backed tokens**. A creator tokenizes a real idea or
+ambition (ship a product, film a movie, record an album, run a marathon), sets public milestones
+and gathers a community around it. Trading fees become the creator's reward, but most of them
+unlock only when milestone proofs are accepted on-chain, so the money follows verifiable progress
+instead of hype alone: **Virality → Community → Motivation → Proof → Rewards.**
+
+What runs today is the testnet MVP of that mechanism: the creator's fees go to a Goal contract on
+NEAR, 20% is claimable at once, 80% unlocks milestone by milestone, and anyone can dispute a proof
+with a bond. A token is not an investment promise or a share in the project; its price can go up
+or down. Product story, flywheel and roadmap: [docs/PRODUCT_VISION.md](docs/PRODUCT_VISION.md).
 
 NEAR Hackathon 2026, memecoins track (track 11). **Testnet only**, nothing is deployed on mainnet.
 The code was written with the help of Claude Code and Codex (hackathon rule Q-005).
 
-**Demo post with video:** [x.com/paonx_eth/status/2121723707949261266](https://x.com/paonx_eth/status/2121723707949261266)
+**Start here:** [live demo](https://paonxeth.github.io/proofee/client/demo.html) ·
+[Judge Quickstart](docs/JUDGE_QUICKSTART.md) ·
+[demo post with video](https://x.com/paonx_eth/status/2121723707949261266) ·
+[what is live vs planned](#what-we-built)
 
 ## Try the live demo
 
@@ -119,6 +132,71 @@ cd ..
 # contract: Rust (pinned in contracts/goal/rust-toolchain.toml)
 cd contracts/goal && cargo test        # unit + sandbox tests; the first run downloads near-sandbox
 ```
+
+## Why ProoFee
+
+Many ideas die not for lack of interest but for lack of resources, support and motivation.
+ProoFee keeps what works in memecoin launchpads (easy launch, trading, sharing, communities) but
+puts a real human goal at the center and ties the creator's reward to proven progress.
+
+1. The creator picks a goal and sets 3–5 milestones with weights and deadlines.
+2. A token launches around the goal; the community follows and trades it.
+3. Trading fees accrue to the goal: 20% is claimable at once, 80% is locked by milestones.
+4. The creator submits a proof (link + sha256 hash) for a milestone.
+5. During the challenge window anyone eligible can dispute it; with a Bond Treasury the challenger
+   posts a bond and the verifier qualifies and decides the case.
+6. An accepted milestone unlocks its share; a rejected or missed one is forfeited for good.
+
+### The ProoFee flywheel
+
+```text
+Compelling idea → public goal + milestones → discovery and community attention
+      ↑                                                      ↓
+more trust and discovery                          participation and trading activity
+      ↑                                                      ↓
+proofs, challenges, verification ← milestone-linked rewards ← trading fees
+```
+
+Two loops meet here. The **social loop** (idea → story → discovery → community → activity) brings
+attention. The **accountability loop** (activity → fees → milestone-linked rewards → proof →
+challenge → trust) keeps the creator delivering. Ambitious goals can earn more visibility,
+engagement may drive token activity and fees, and verifiable progress helps sustain trust.
+None of this is guaranteed: fees depend on real trading volume and pool parameters, and a token's
+price can fall as well as rise.
+
+### Why NEAR
+
+- **New on-chain activity:** token launches, Rhea DCL swaps, LP fees, proofs, challenges and claims.
+- **New communities:** creators and supporters can come to NEAR for a specific goal, not only for
+  trading (a potential, not a measured result).
+- **Verifiable economics:** milestone rules, fee split, bond outcomes and payouts are enforced and
+  recorded by NEAR contracts.
+- **Ecosystem:** Rhea DCL is used in the testnet demo; NEAR Intents is a planned integration for
+  chain-abstracted participation.
+
+### Roadmap
+
+| Phase | Status | Scope |
+| --- | --- | --- |
+| 1. Testnet MVP | Current | NEP-141 token, Rhea DCL pool, keyless LP Locker, Goal contract with 20/80 fee accounting, proofs, free and bonded challenges, Bond Treasury, claims, historical testnet evidence and Judge Quickstart. A browser launch has not been confirmed end to end |
+| 2. Public launcher | In progress | Wallet-based web launch, storage and budget optimisation, fee transparency, orchestrator reliability, funding limits, Trade/Proof/Challenge UX |
+| 3. Decentralized Proof of Trust | Planned | Independent staked verifiers, voting or arbitration, slashing of dishonest parties, rewards for honest challengers, reputation, spam protection, parallel challenges |
+| 4. Mainnet and NEAR Intents | Planned | Independent audit, security and economic review, mainnet launch, NEAR Intents for cross-chain participation |
+| 5. Social discovery | Planned | Creator feeds and follows, profiles, progress journals, milestone analytics, recommendations with transparent criteria |
+
+### Roles and trust today
+
+| Role | Can do | Cannot do |
+| --- | --- | --- |
+| Creator | submit proofs, claim the unlocked share | change parameters, withdraw locked or forfeited fees |
+| Verifier (one account set in `new`) | qualify and decide challenges | challenge from the same account, change the goal |
+| Anyone | `sync`, `finalize` after the window, `resolve_timeout` 24 h after an undecided challenge | — |
+| Bond Treasury admin | `register_goal`, `set_goal_authorized`, `set_paused` on the Treasury | touch the goal contract or its fees |
+| Rhea DCL | external pool and fee source | — |
+
+"No admin methods" applies to the Goal contract only. The verifier is a designated account, not a
+decentralized oracle: a separate address does not prove an independent owner (M-3), and a
+correct challenger gets the bond back but no reward yet.
 
 ## How the contract works
 
