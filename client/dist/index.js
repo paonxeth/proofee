@@ -152,12 +152,18 @@ export async function verifySpec(goal, options = {}) {
 // ---- Transactions (unsigned, wallet selector / near-connect format) ----
 /** 100 TGas. */
 export const DEFAULT_GAS = "100000000000000";
+/**
+ * 300 TGas for `resolve_timeout`. With a Bond Treasury the goal schedules Treasury
+ * `refund_expired` (100 TGas) plus a callback (15 TGas) on top of its own execution, so
+ * 100 TGas cannot cover it (release/goal-treasury/gas-deposit-storage.json: prepaid_gas 300).
+ */
+export const RESOLVE_TIMEOUT_GAS = "300000000000000";
 export const ZERO_DEPOSIT = "0";
-function call(goalId, methodName, args = {}) {
+function call(goalId, methodName, args = {}, gas = DEFAULT_GAS) {
     return {
         receiverId: goalId,
         actions: [
-            { type: "FunctionCall", params: { methodName, args, gas: DEFAULT_GAS, deposit: ZERO_DEPOSIT } },
+            { type: "FunctionCall", params: { methodName, args, gas, deposit: ZERO_DEPOSIT } },
         ],
     };
 }
@@ -171,8 +177,11 @@ export const challengeTx = (goalId, index, reason) => call(goalId, "challenge", 
 export const finalizeTx = (goalId, index) => call(goalId, "finalize", { index });
 /** Verifier, within 24 h of the challenge (Challenged → Accepted / Rejected). */
 export const resolveTx = (goalId, index, accept) => call(goalId, "resolve", { index, accept });
-/** Anyone, 24 h after the challenge if the verifier did not resolve (Challenged → Accepted). */
-export const resolveTimeoutTx = (goalId, index) => call(goalId, "resolve_timeout", { index });
+/**
+ * Anyone, 24 h after the challenge if the verifier did not resolve (Challenged → Accepted).
+ * Uses RESOLVE_TIMEOUT_GAS: in Treasury mode the call also settles the bond.
+ */
+export const resolveTimeoutTx = (goalId, index) => call(goalId, "resolve_timeout", { index }, RESOLVE_TIMEOUT_GAS);
 /** Anyone, after the deadline of a milestone without a proof (Pending → Failed). */
 export const expireTx = (goalId, index) => call(goalId, "expire", { index });
 /** Creator: pay out everything claimable. */

@@ -74,22 +74,23 @@ test("viewFunction surfaces contract errors", async () => {
   await assert.rejects(viewFunction("g.testnet", "get_goal", {}, { fetch: fetchErr }), /wasm execution failed/);
 });
 
-test("transactions: receiver, method, args, 100 TGas, zero deposit", () => {
+test("transactions: receiver, method, args, gas, zero deposit", () => {
   const g = "goal.testnet";
-  const cases: [ReturnType<typeof syncTx>, string, object][] = [
-    [syncTx(g), "sync", {}],
-    [submitProofTx(g, 1, "https://p", "ab"), "submit_proof", { index: 1, proof_uri: "https://p", proof_hash: "ab" }],
-    [challengeTx(g, 1, "why"), "challenge", { index: 1, reason: "why" }],
-    [finalizeTx(g, 0), "finalize", { index: 0 }],
-    [resolveTx(g, 1, false), "resolve", { index: 1, accept: false }],
-    [resolveTimeoutTx(g, 2), "resolve_timeout", { index: 2 }],
-    [expireTx(g, 2), "expire", { index: 2 }],
-    [claimTx(g), "claim", {}],
+  const T100 = "100000000000000", T300 = "300000000000000";
+  const cases: [ReturnType<typeof syncTx>, string, object, string][] = [
+    [syncTx(g), "sync", {}, T100],
+    [submitProofTx(g, 1, "https://p", "ab"), "submit_proof", { index: 1, proof_uri: "https://p", proof_hash: "ab" }, T100],
+    [challengeTx(g, 1, "why"), "challenge", { index: 1, reason: "why" }, T100],
+    [finalizeTx(g, 0), "finalize", { index: 0 }, T100],
+    [resolveTx(g, 1, false), "resolve", { index: 1, accept: false }, T100],
+    [resolveTimeoutTx(g, 2), "resolve_timeout", { index: 2 }, T300], // Treasury refund_expired 100 + callback 15,
+    [expireTx(g, 2), "expire", { index: 2 }, T100],
+    [claimTx(g), "claim", {}, T100],
   ];
-  for (const [tx, methodName, args] of cases) {
+  for (const [tx, methodName, args, gas] of cases) {
     assert.deepEqual(tx, {
       receiverId: g,
-      actions: [{ type: "FunctionCall", params: { methodName, args, gas: "100000000000000", deposit: "0" } }],
+      actions: [{ type: "FunctionCall", params: { methodName, args, gas, deposit: "0" } }],
     });
   }
 });
