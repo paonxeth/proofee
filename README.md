@@ -6,6 +6,8 @@ accepted, so a creator cannot take all the fees and walk away.**
 NEAR Hackathon 2026, memecoins track (track 11). **Testnet only**, nothing is deployed on mainnet.
 The code was written with the help of Claude Code and Codex (hackathon rule Q-005).
 
+**Demo post with video:** [x.com/paonx_eth/status/2121723707949261266](https://x.com/paonx_eth/status/2121723707949261266)
+
 ## Try the live demo
 
 Everything below runs on NEAR testnet. You need no wallet and no keys: the page reads the contracts
