@@ -71,7 +71,10 @@ jobs:
             cd contracts/goal
             RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --tests -- --test-threads=1
           else
+            rustup toolchain install 1.99.1 --profile minimal --target wasm32-unknown-unknown
             cd bond-treasury
+            # test.cjs deploys target/.../bond_treasury.wasm and mock_goal.wasm: build them first (README, scripts/check.sh)
+            RUSTUP_TOOLCHAIN=1.99.1 cargo build --workspace --locked --release --target wasm32-unknown-unknown
             bash tests/sandbox/run.sh
           fi
           echo "PASS sandbox $CONTRACT"
