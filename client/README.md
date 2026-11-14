@@ -44,7 +44,7 @@ spec.ok;        // true if sha256(file) === goal.goal_spec_hash
 spec.content;   // the spec file as text
 ```
 
-- RPC endpoint: `https://rpc.testnet.near.org` by default; pass `{ rpcUrl }` to change it.
+- RPC endpoint: `FastNEAR Testnet first, NEAR Testnet RPC as fallback; pass `{ rpcUrl }` to change it.
 - `yoctoToNear("700000000000000000000000") === "0.7"` — exact, string in, string out.
 - `verifySpec` never throws: on a download error it returns `ok: false` with `error`.
 - In browsers `crypto.subtle` exists only on https or `localhost`.

@@ -1,0 +1,94 @@
+name: Judge verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [client, goal, treasury, locker, launcher]
+        include:
+          - check: goal
+            rust: 1.95.0
+          - check: treasury
+            rust: 1.99.1
+          - check: locker
+            rust: 1.100.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+      - name: Verify
+        env:
+          CHECK: ${{ matrix.check }}
+          PINNED_RUST: ${{ matrix.rust }}
+        shell: bash
+        run: |
+          trap 'echo "FAIL $CHECK"' ERR
+          if [[ -n "$PINNED_RUST" ]]; then
+            rustup toolchain install "$PINNED_RUST" --profile minimal --target wasm32-unknown-unknown
+            export RUSTUP_TOOLCHAIN="$PINNED_RUST"
+          fi
+          case "$CHECK" in
+            client) cd client; npm ci; npm test; npm run build; git diff --exit-code -- dist ;;
+            goal) cd contracts/goal; cargo test --locked --lib ;;
+            treasury) cd bond-treasury; cargo test --workspace --locked --lib ;;
+            locker) cd launcher; npm test ;;
+            launcher) cd launcher; npm run verify ;;
+          esac
+          echo "PASS $CHECK"
+
+  sandbox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        contract: [goal, treasury]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+      - name: Run local chain tests
+        env:
+          CONTRACT: ${{ matrix.contract }}
+        shell: bash
+        run: |
+          trap 'echo "FAIL sandbox $CONTRACT"' ERR
+          if [[ "$CONTRACT" == goal ]]; then
+            rustup toolchain install 1.95.0 --profile minimal --target wasm32-unknown-unknown
+            cargo +1.95.0 install cargo-near --version 0.23.0 --locked
+            cd contracts/goal
+            RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --tests -- --test-threads=1
+          else
+            cd bond-treasury
+            bash tests/sandbox/run.sh
+          fi
+          echo "PASS sandbox $CONTRACT"
+
+  testnet:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+      - name: Read public Testnet data
+        shell: bash
+        run: |
+          trap 'echo "FAIL public Testnet read"' ERR
+          cd client
+          npm ci
+          npm run test:live
+          echo "PASS public Testnet read"

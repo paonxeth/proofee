@@ -141,3 +141,31 @@ test("nearblocksUrl and nsToMs", () => {
   assert.equal(nsToMs(1_999_999), 2);
   assert.deepEqual([...FINAL_CASE_STAGES], ["Settled", "TimeoutRequested", "Orphaned"]);
 });
+
+test("viewFunction retries a rate-limited public RPC using the fallback", async () => {
+  const endpoints: string[] = [];
+  const fetch = (async (url: string, init: RequestInit) => {
+    endpoints.push(url);
+    assert.ok(init.signal);
+    return endpoints.length === 1
+      ? new Response("", { status: 429 })
+      : rpcStub({ ok: true })(url, init);
+  }) as typeof globalThis.fetch;
+  assert.deepEqual(await viewFunction("g.testnet", "get_goal", {}, { fetch }), { ok: true });
+  assert.deepEqual(endpoints, [
+    "https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org",
+  ]);
+});
+
+test("viewFunction reports an unavailable explicit endpoint without contacting another host", async () => {
+  let calls = 0;
+  const fetch = (async () => {
+    calls++;
+    throw new DOMException("request timed out", "TimeoutError");
+  }) as typeof globalThis.fetch;
+  await assert.rejects(
+    viewFunction("g.testnet", "get_goal", {}, { fetch, rpcUrl: "https://example.test" }),
+    /NEAR Testnet could not load g.testnet.get_goal .*example.test: request timed out/,
+  );
+  assert.equal(calls, 1);
+});

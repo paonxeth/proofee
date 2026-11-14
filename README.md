@@ -87,6 +87,15 @@ where each one has its fix status.
 
 ## Quickstart for judges
 
+Follow the [Judge Quickstart](docs/JUDGE_QUICKSTART.md) for commands, expected results and
+read-only verification of historical Launcher receipts.
+
+This repository contains the static GitHub Pages demo and the Launcher CLI with its LP Locker.
+The separate [Vercel frontend](https://proofee-demo.vercel.app/) and
+[hosted Launcher health endpoint](https://proofee.duckdns.org/health) are public services.
+Their React and hosted API/worker/registrar sources are outside this checkout. An automated token
+launch from the browser has not been confirmed end to end.
+
 **Without keys (2 minutes).** Open the [live demo](https://paonxeth.github.io/proofee/client/demo.html)
 and follow [Try the live demo](#try-the-live-demo). Check any number against the chain:
 [goal-5](https://testnet.nearblocks.io/address/goal-5.proofee-anton.testnet),

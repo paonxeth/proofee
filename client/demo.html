@@ -54,7 +54,9 @@
     // ?goal=<account> to show another goal, ?rpc=<url> for another endpoint.
     const params = new URLSearchParams(location.search);
     const goalId = params.get("goal") || DEMO_GOAL_ID;
-    const rpcUrl = params.get("rpc") || undefined;
+    const override = params.get("rpc");
+    const rpcUrl = ["https://rpc.testnet.fastnear.com", "https://rpc.testnet.near.org"].includes(override)
+      ? override : undefined;
 
     const $ = (id) => document.getElementById(id);
     const el = (tag, text, cls) => {
@@ -184,7 +186,8 @@
     }
 
     main().catch((e) => {
-      $("error").textContent = String(e);
+      $("title").textContent = "Goal unavailable";
+      $("error").textContent = e.message;
       document.body.dataset.ready = "error";
     });
   </script>

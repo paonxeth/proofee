@@ -96,7 +96,7 @@ export interface TreasuryBond {
     decision: CaseDecision | "NeutralRefund" | null;
     demo: boolean;
 }
-export declare const TESTNET_RPC_URL = "https://rpc.testnet.near.org";
+export declare const TESTNET_RPC_URL = "https://rpc.testnet.fastnear.com";
 /** Demo goal with a Bond Treasury (docs/DEMO_RUN_TREASURY.md). */
 export declare const DEMO_GOAL_ID = "goal-5.proofee-anton.testnet";
 /** Earlier demo goal with free challenges, no treasury (docs/DEMO_RUN.md). */
