@@ -37,8 +37,12 @@ Treasury accounting and Locker fee collection, recipient binding and failure pat
 **Do** → Run the integration suites on Ubuntu x86_64.
 
 ```sh
+# cargo-near pulls hidapi, whose build script needs libudev and pkg-config
+sudo apt-get update && sudo apt-get install -y libudev-dev pkg-config
 cargo +1.95.0 install cargo-near --version 0.23.0 --locked
 (cd contracts/goal && RUSTUP_TOOLCHAIN=1.95.0 cargo test --locked --tests -- --test-threads=1)
+# the Treasury sandbox deploys target/wasm32-unknown-unknown/release/{bond_treasury,mock_goal}.wasm
+(cd bond-treasury && RUSTUP_TOOLCHAIN=1.99.1 cargo build --workspace --locked --release --target wasm32-unknown-unknown)
 (cd bond-treasury && bash tests/sandbox/run.sh)
 ```
 

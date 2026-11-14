@@ -154,6 +154,12 @@ export declare function verifySpec(goal: GoalView, options?: {
 }): Promise<SpecCheck>;
 /** 100 TGas. */
 export declare const DEFAULT_GAS = "100000000000000";
+/**
+ * 300 TGas for `resolve_timeout`. With a Bond Treasury the goal schedules Treasury
+ * `refund_expired` (100 TGas) plus a callback (15 TGas) on top of its own execution, so
+ * 100 TGas cannot cover it (release/goal-treasury/gas-deposit-storage.json: prepaid_gas 300).
+ */
+export declare const RESOLVE_TIMEOUT_GAS = "300000000000000";
 export declare const ZERO_DEPOSIT = "0";
 export interface FunctionCallAction {
     type: "FunctionCall";
@@ -179,7 +185,10 @@ export declare const challengeTx: (goalId: string, index: number, reason: string
 export declare const finalizeTx: (goalId: string, index: number) => Transaction;
 /** Verifier, within 24 h of the challenge (Challenged → Accepted / Rejected). */
 export declare const resolveTx: (goalId: string, index: number, accept: boolean) => Transaction;
-/** Anyone, 24 h after the challenge if the verifier did not resolve (Challenged → Accepted). */
+/**
+ * Anyone, 24 h after the challenge if the verifier did not resolve (Challenged → Accepted).
+ * Uses RESOLVE_TIMEOUT_GAS: in Treasury mode the call also settles the bond.
+ */
 export declare const resolveTimeoutTx: (goalId: string, index: number) => Transaction;
 /** Anyone, after the deadline of a milestone without a proof (Pending → Failed). */
 export declare const expireTx: (goalId: string, index: number) => Transaction;
