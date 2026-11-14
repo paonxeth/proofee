@@ -4,7 +4,8 @@
 /** Stages after which the goal does nothing more with the bond. */
 export const FINAL_CASE_STAGES = ["Settled", "TimeoutRequested", "Orphaned"];
 // ---- Reading ----
-export const TESTNET_RPC_URL = "https://rpc.testnet.near.org";
+export const TESTNET_RPC_URL = "https://rpc.testnet.fastnear.com";
+const FALLBACK_TESTNET_RPC_URL = "https://rpc.testnet.near.org";
 /** Demo goal with a Bond Treasury (docs/DEMO_RUN_TREASURY.md). */
 export const DEMO_GOAL_ID = "goal-5.proofee-anton.testnet";
 /** Earlier demo goal with free challenges, no treasury (docs/DEMO_RUN.md). */
@@ -12,7 +13,7 @@ export const FREE_CHALLENGE_GOAL_ID = "goal-4.proofee-anton.testnet";
 /** Calls a view method and parses its JSON result. */
 export async function viewFunction(contractId, methodName, args = {}, options = {}) {
     const doFetch = options.fetch ?? fetch;
-    const response = await doFetch(options.rpcUrl ?? TESTNET_RPC_URL, {
+    const request = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -27,11 +28,37 @@ export async function viewFunction(contractId, methodName, args = {}, options = 
                 args_base64: bytesToBase64(new TextEncoder().encode(JSON.stringify(args))),
             },
         }),
-    });
-    if (!response.ok) {
-        throw new Error(`RPC HTTP ${response.status} for ${contractId}.${methodName}`);
+    };
+    const endpoints = options.rpcUrl
+        ? [options.rpcUrl] : [TESTNET_RPC_URL, FALLBACK_TESTNET_RPC_URL];
+    const failures = [];
+    let body;
+    for (const endpoint of endpoints) {
+        try {
+            const response = await doFetch(endpoint, {
+                ...request,
+                signal: AbortSignal.timeout(8000),
+                redirect: "error",
+            });
+            if (!response.ok)
+                throw new Error(`HTTP ${response.status}`);
+            const payload = await response.json();
+            if (payload?.error && payload.error.name !== "HANDLER_ERROR") {
+                throw new Error(JSON.stringify(payload.error));
+            }
+            if (!payload?.error && !payload?.result?.error && !Array.isArray(payload?.result?.result)) {
+                throw new Error("invalid RPC response");
+            }
+            body = payload;
+            break;
+        }
+        catch (error) {
+            failures.push(`${URL.canParse(endpoint) ? new URL(endpoint).host : "invalid RPC URL"}: ${error instanceof Error ? error.message : String(error)}`);
+        }
     }
-    const body = await response.json();
+    if (!body) {
+        throw new Error(`NEAR Testnet could not load ${contractId}.${methodName} (${failures.join("; ")}). Try again shortly.`);
+    }
     // RPC errors come either at the top level or inside result (contract panics).
     const error = body.error ?? body.result?.error;
     if (error) {
@@ -106,7 +133,7 @@ export async function verifySpec(goal, options = {}) {
     const doFetch = options.fetch ?? fetch;
     const base = { uri: goal.goal_uri, expected: goal.goal_spec_hash };
     try {
-        const response = await doFetch(goal.goal_uri);
+        const response = await doFetch(goal.goal_uri, { signal: AbortSignal.timeout(8000) });
         if (!response.ok)
             throw new Error(`HTTP ${response.status}`);
         const bytes = new Uint8Array(await response.arrayBuffer());

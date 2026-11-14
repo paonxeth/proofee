@@ -129,9 +129,12 @@ and not the 300 TGas gas limit. Per-operation breakdown — evidence/transaction
 | negative-parent-upgrade | [1aTfJ1tzGTEVQB3JVkAJgu92JJ7MWzUiZEL2PCKvP2w](https://testnet.nearblocks.io/txns/1aTfJ1tzGTEVQB3JVkAJgu92JJ7MWzUiZEL2PCKvP2w) |
 | negative-stranger-claim | [2mALkQhjZXgeN1c8NH5kqaxnVjcKBk1SibSkL5yfjkPa](https://testnet.nearblocks.io/txns/2mALkQhjZXgeN1c8NH5kqaxnVjcKBk1SibSkL5yfjkPa) |
 
-Full list — evidence/final-transactions.json and transactions.csv. All raw RPC,
-child receipt outcomes, balances and transaction signatures are available in the release archive
-in full-evidence/. There are no private signing keys there.
+The transaction list is in `evidence/final-transactions.json` and `evidence/transactions.csv`.
+`npm run verify` uses the published snapshots and a projection of the 62 final Testnet RPC
+responses in `evidence/historical-receipts.json`. The projection carries transaction actions,
+receipt outcomes, logs, gas and native transfer receipts. The original signatures and complete
+RPC envelopes are outside this bundle. The [Judge Quickstart](../docs/JUDGE_QUICKSTART.md)
+shows how to re-fetch the same transaction hashes directly from archival RPC.
 
 ## Limitations and handoff
 

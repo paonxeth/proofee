@@ -4,7 +4,7 @@
   "description": "Sequential Testnet Launcher and permissionless LP fee orchestration",
   "main": "scripts/launch.cjs",
   "scripts": {
-    "test": "cargo test --manifest-path contracts/locker/Cargo.toml --lib",
+    "test": "cargo test --locked --manifest-path contracts/locker/Cargo.toml --lib",
     "build": "bash scripts/build.sh",
     "launch": "node scripts/launch.cjs",
     "e2e": "node scripts/e2e.cjs",
